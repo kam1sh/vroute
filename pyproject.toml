@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "networkservant"
+version = "0.1.0"
+description = ""
+authors = ["Igor Ovsyannikov <kamish@outlook.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+librouteros = "^2.3"
+
+[tool.poetry.dev-dependencies]
+pytest = "^3.0"
+pylint = "^2.3"
+black = {version = "^18.3-alpha.0", allows-prereleases = true}
+toml = "^0.10.0"
+[tool.poetry.scripts]
+netservant = "netservant.console:main"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
+
