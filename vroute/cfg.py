@@ -12,10 +12,10 @@ except ImportError:
 
 class Configuration:
     def __init__(self, from_file=None):
-        from_file = Path(from_file or "~/.config/vroute.yml")
+        from_file = Path(from_file) if from_file else Path.home() / ".config/vroute.yml"
         if not from_file.exists():
             raise ValueError(
-                "No configuration file found.\n"
+                f"No configuration file found in {from_file}.\n"
                 "Please create one according the config-template.yml"
                 " in the repository root."
                 )
@@ -26,10 +26,10 @@ class Configuration:
     def db_url(self):
         url = self.get("db.url")
         if not url:
-            folder = Path("~/.local/share/vroute")
+            folder = Path.home() / ".local/share/vroute"
             folder.mkdir(parents=True, exist_ok=True)
-            url = folder.joinpath("db.sqlite3").absolute()
-        return "sqlite://" + (self.get("db.url"))
+            url = str(folder.joinpath("db.sqlite3").absolute())
+        return "sqlite://" + url
 
     @property
     def db_debug(self):
