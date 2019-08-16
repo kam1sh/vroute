@@ -6,8 +6,10 @@ import vroute
 
 config_template = Path(__file__).parent.parent / "config-template.yml"
 
+
 def pytest_addoption(parser):
     parser.addoption("--db-log", action="store_true", help="Enable database logging")
+
 
 @pytest.fixture(scope="session", autouse=True)
 def app(pytestconfig, tmp_path_factory):

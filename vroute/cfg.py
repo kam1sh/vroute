@@ -5,10 +5,12 @@ Configuration code: config file loading, environment variables, etc
 from pathlib import Path
 
 from yaml import load
+
 try:
     from yaml import CLoader as Loader
 except ImportError:
     from yaml import Loader
+
 
 class Configuration:
     def __init__(self, from_file=None):
@@ -18,7 +20,7 @@ class Configuration:
                 f"No configuration file found in {from_file}.\n"
                 "Please create one according the config-template.yml"
                 " in the repository root."
-                )
+            )
         with from_file.open() as fd:
             self.file = load(fd, Loader=Loader)
 
@@ -34,7 +36,6 @@ class Configuration:
     @property
     def db_debug(self):
         return self.get("db.debug") or False
-
 
     def get(self, pth):
         """

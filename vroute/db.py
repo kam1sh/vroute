@@ -4,6 +4,8 @@ import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime
 
+from .console import writeln
+
 Base = declarative_base()
 
 
@@ -15,13 +17,17 @@ class AddressRecord(Base):
     expires = Column(DateTime)
     comment = Column(String)
 
-MEMORY = "/:memory:"
+
+MEMORY = ":memory:"
+
 
 class Database:
     def __init__(self, file=MEMORY, debug=False, auto_create=True):
-        url = "sqlite://" + file
+        url = "sqlite:///" + file
         self.engine = sqlalchemy.create_engine(url, echo=debug)
-        if file != MEMORY and not Path(file).exists():
+        writeln("Using database: %s" % url)
+        self.file = Path(file)
+        if file != MEMORY and not self.file.exists():
             if not auto_create:
                 raise FileNotFoundError(f"File {file} does not exist.")
             else:
