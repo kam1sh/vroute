@@ -1,4 +1,4 @@
-from netservant import __version__
+from vroute import __version__
 import toml
 
 def test_version():

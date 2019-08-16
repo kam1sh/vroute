@@ -1,0 +1,12 @@
+vpn:
+  rule:
+    name: vpn
+    priority: 40
+  route_addr: <address>
+
+
+routeros:
+  addr: <router address>
+  vpn_addr: <address to forward routes>
+  username:
+  password:

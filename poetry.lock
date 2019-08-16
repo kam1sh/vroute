@@ -56,10 +56,11 @@ description = "Cleo allows you to create beautiful and testable command-line int
 name = "cleo"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "0.7.5"
+version = "0.6.8"
 
 [package.dependencies]
-clikit = ">=0.3.1,<0.4.0"
+pastel = ">=0.1.0,<0.2.0"
+pylev = ">=1.3,<2.0"
 
 [[package]]
 category = "dev"
@@ -68,18 +69,6 @@ name = "click"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 version = "7.0"
-
-[[package]]
-category = "main"
-description = "CliKit is a group of utilities to build beautiful and testable command line interfaces."
-name = "clikit"
-optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
-version = "0.3.1"
-
-[package.dependencies]
-pastel = ">=0.1.0,<0.2.0"
-pylev = ">=1.3,<2.0"
 
 [[package]]
 category = "dev"
@@ -282,7 +271,7 @@ python-versions = ">=2.7"
 version = "0.5.2"
 
 [metadata]
-content-hash = "2a7121885c3b4936f1ff36c874301947a23dce98f00f1f2035a51d27cc62be93"
+content-hash = "4097cf31f47d2fb114fd9484551e9d2786b6113fa695ac507cb592794de02824"
 python-versions = "^3.6"
 
 [metadata.hashes]
@@ -291,9 +280,8 @@ astroid = ["6560e1e1749f68c64a4b5dee4e091fce798d2f0d84ebe638cf0e0585a343acf4", "
 atomicwrites = ["03472c30eb2c5d1ba9227e4c2ca66ab8287fbfbbda3888aa93dc2e28fc6811b4", "75a9445bac02d8d058d5e1fe689654ba5a6556a1dfd8ce6ec55a0ed79866cfa6"]
 attrs = ["69c0dbf2ed392de1cb5ec704444b08a5ef81680a61cb899dc08127123af36a79", "f0b870f674851ecbfbbbd364d6b5cbdff9dcedbc7f3f5e18a6891057f21fe399"]
 black = ["817243426042db1d36617910df579a54f1afd659adb96fc5032fcf4b36209739", "e030a9a28f542debc08acceb273f228ac422798e5215ba2a791a6ddeaaca22a5"]
-cleo = ["2f1cfd55a4b30c002ef86d740ededc9c11d6f89ea0dc56a14abe5aaf32c2015c", "6c28adbb0815b99e530bb4f783602459ab916c76c4db26c7b934223014eb1a34"]
+cleo = ["85a63076b72ca376fb06668be1fc7758dc16740b394783d5cc65200c4b32f71b", "9b7f79f1aa470a025c0d28c76aa225ee9e65028d32f80032e871aa3500df61b8"]
 click = ["2335065e6395b9e67ca716de5f7526736bfa6ceead690adf616d925bdc622b13", "5b94b49521f6456670fdb30cd82a4eca9412788a93fa6dd6df72c94d5a8ff2d7"]
-clikit = ["514810761b27751865c4c5b6bb719ad3e3b2d3768b02e081a60f6526372a77a1", "979a7442ca1be1eaa9fae3e0ab7d63828b85fd42ded2d6954340a8b926500b39"]
 colorama = ["05eed71e2e327246ad6b38c540c4a3117230b19679b875190486ddd2d721422d", "f8ac84de7840f5b9c4e3347b3c1eaa50f7e49c2b07596221daec5edaabbd7c48"]
 importlib-metadata = ["23d3d873e008a513952355379d93cbcab874c58f4f034ff657c7a87422fa64e8", "80d2de76188eabfbfcf27e6a37342c2827801e59c4cc14b0371c56fed43820e3"]
 isort = ["54da7e92468955c4fceacd0c86bd0ec997b0e1ee80d97f67c35a78b719dccab1", "6e811fcb295968434526407adb8796944f1988c5b65e8139058f2014cbe100fd"]

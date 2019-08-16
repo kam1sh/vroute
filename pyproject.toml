@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "networkservant"
+name = "vroute"
 version = "0.1.0"
 description = ""
 authors = ["Igor Ovsyannikov <kamish@outlook.com>"]
@@ -7,9 +7,9 @@ authors = ["Igor Ovsyannikov <kamish@outlook.com>"]
 [tool.poetry.dependencies]
 python = "^3.6"
 librouteros = "^2.3"
-cleo = "^0.7.5"
 sqlalchemy = "^1.3"
 pyyaml = "^5.1"
+cleo = "^0.6.7"
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.0"
@@ -20,7 +20,7 @@ virtualenv-tools3 = "^2.0"
 virtualenv = "^16.7"
 
 [tool.poetry.scripts]
-netservant = "netservant.console:main"
+vroute = "vroute.console:main"
 
 [build-system]
 requires = ["poetry>=0.12"]

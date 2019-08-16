@@ -14,10 +14,7 @@ class AddressRecord(Base):
 
 
 class Database:
-    def __init__(self):
-        self.engine = None
-
-    def load(self, url, debug=False):
+    def __init__(self, url="sqlite:///:memory:", debug=False):
         self.engine = sqlalchemy.create_engine(url, echo=debug)
 
     def create(self):

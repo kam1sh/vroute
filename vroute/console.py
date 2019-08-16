@@ -2,14 +2,8 @@ import cleo
 from cleo import Command
 from .db import Database
 from .cfg import Configuration
-from . import __version__
+from . import Application
 
-class Application(cleo.Application):
-    def run(self):
-        cfg = Configuration()
-        database = Database()
-        database.load("sqlite:///:memory:")
-        return super().run()
 
 
 class AddRecord(Command):
@@ -24,6 +18,6 @@ class AddRecord(Command):
         pass
 
 def main():
-    app = Application(name="Network servant", version=__version__)
+    app = Application()
     app.add(AddRecord())
     app.run()
