@@ -4,7 +4,7 @@ import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime
 
-from .console import writeln
+from .logger import verbose
 
 Base = declarative_base()
 
@@ -25,7 +25,6 @@ class Database:
     def __init__(self, file=MEMORY, debug=False, auto_create=True):
         url = "sqlite:///" + file
         self.engine = sqlalchemy.create_engine(url, echo=debug)
-        writeln("Using database: %s" % url)
         self.file = Path(file)
         if file != MEMORY and not self.file.exists():
             if not auto_create:

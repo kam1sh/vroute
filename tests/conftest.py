@@ -1,8 +1,10 @@
+import logging
 from pathlib import Path
 import shutil
 
 import pytest
 import vroute
+from vroute.logger import logger
 
 config_template = Path(__file__).parent.parent / "config-template.yml"
 
@@ -15,7 +17,8 @@ def pytest_addoption(parser):
 def app(pytestconfig, tmp_path_factory):
     cfg_path = tmp_path_factory.mktemp("configdir") / "config.yml"
     shutil.copyfile(config_template, cfg_path)
+    logger.test_log.setLevel(logging.DEBUG)
     app = vroute.VRoute()
     app.read_config(file=cfg_path)
-    app.load_db("/:memory:", debug=pytestconfig.getoption("--db-log"))
+    app.load_db(":memory:", debug=pytestconfig.getoption("--db-log"))
     return app
