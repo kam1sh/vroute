@@ -29,7 +29,7 @@ class Configuration:
             folder = Path.home() / ".local/share/vroute"
             folder.mkdir(parents=True, exist_ok=True)
             url = str(folder.joinpath("db.sqlite3").absolute())
-        return "sqlite://" + url
+        return url
 
     @property
     def db_debug(self):
