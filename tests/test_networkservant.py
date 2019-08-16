@@ -1,4 +1,4 @@
-from networkservant import __version__
+from netservant import __version__
 import toml
 
 def test_version():
