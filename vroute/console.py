@@ -1,7 +1,7 @@
 """Cleo stuff"""
 
 from cleo import formatters, Application as BaseApplication
-from . import VRoute, __version__, commands
+from . import VRoute, __version__, commands, logger
 
 
 class Application(BaseApplication):
@@ -32,5 +32,5 @@ app.add(commands.AddRecord())
 
 
 def main():
-    output = None
+    output = logger.logger
     app.run(output_=output)

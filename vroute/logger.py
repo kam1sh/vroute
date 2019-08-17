@@ -7,8 +7,8 @@ from cleo.outputs import Output, ConsoleOutput
 
 class Level(enum.IntEnum):
     ALL = 1
-    INFO = 2
-    VERBOSE = 3
+    VERBOSE = 2
+    INFO = 3
     DEBUG = 4
 
     def as_logging(self):
@@ -36,19 +36,25 @@ class Logger(ConsoleOutput):
         self.test_log = logging.getLogger(name or "console")
 
     def log(self, msg, *args):
+        """ Prints line on the screen. """
+        self._log(msg, Level.ALL, args)
+
+    def info(self, msg, *args):
+        """ Prints line on the screen with the level `INFO`. """
         self._log(msg, Level.INFO, args)
 
     def verbose(self, msg, *args):
+        """ Prints line on the screen with the level `VERBOSE`. """
         self._log(msg, Level.VERBOSE, args)
 
     def debug(self, msg, *args):
+        """ Prints line on the screen with the level `DEBUG`. """
         self._log(msg, Level.DEBUG, args)
 
     def _log(self, msg, level, args):
         if "PYTEST_CURRENT_TEST" in os.environ:
             self.test_log.log(level.as_logging(), msg, *args)
         elif self.verbosity >= level.as_clikit():
-            raise Exception()
             self.writeln(msg % args)
 
 
