@@ -5,7 +5,7 @@ class AddRecord(Command):
     """
     Adds a new record to the database
 
-    add-record
+    add
         {hostname? : FQDN to add}
     """
 

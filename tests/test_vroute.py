@@ -1,6 +1,6 @@
 from cleo import CommandTester
-from vroute import __version__
 import toml
+from vroute import __version__
 
 
 def test_version():
@@ -10,7 +10,7 @@ def test_version():
 
 
 def test_addhost(app):
-    cmd = app.find("add-record")
+    cmd = app.find("add")
     tester = CommandTester(cmd)
     tester.set_inputs(["rutracker.org"])
-    tester.execute([("command", cmd.get_name())], options={"verbosity": 256})
+    tester.execute([("command", cmd.get_name())])

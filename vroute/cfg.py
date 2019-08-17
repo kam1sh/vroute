@@ -24,18 +24,28 @@ class Configuration:
         with from_file.open() as fd:
             self.file = load(fd, Loader=Loader)
 
+    def get_appdir(self) -> Path:
+        """ Returns path to the default application directory. """
+        folder = Path.home() / ".local/share/vroute"
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
     @property
-    def db_url(self):
+    def db_file(self) -> str:
         url = self.get("db.url")
         if not url:
-            folder = Path.home() / ".local/share/vroute"
-            folder.mkdir(parents=True, exist_ok=True)
+            folder = self.get_appdir()
             url = str(folder.joinpath("db.sqlite3").absolute())
         return url
 
     @property
-    def db_debug(self):
-        return self.get("db.debug") or False
+    def db_debug(self) -> bool:
+        return bool(self.get("db.debug"))
+
+    @property
+    def lock_file(self) -> Path:
+        file = self.get("lock_file")
+        return Path(file) if file else self.get_appdir().joinpath("lock")
 
     def get(self, pth):
         """

@@ -1,9 +1,7 @@
 import enum
-import logging
-import os
 
 from cleo.outputs import Output, ConsoleOutput
-
+from cleo import formatters
 
 class Level(enum.IntEnum):
     ALL = 1
@@ -11,14 +9,9 @@ class Level(enum.IntEnum):
     INFO = 3
     DEBUG = 4
 
-    def as_logging(self):
-        return _logging_levels[self.value]
-
     def as_clikit(self):
         return _clikit_levels[self.value]
 
-
-_logging_levels = {1: logging.INFO, 2: logging.INFO, 3: logging.DEBUG, 4: logging.DEBUG}
 
 _clikit_levels = {
     1: Output.VERBOSITY_NORMAL,
@@ -29,11 +22,12 @@ _clikit_levels = {
 
 
 class Logger(ConsoleOutput):
-    test_log: logging.Logger
-
-    def __init__(self, name=None):
+    def __init__(self):
         super().__init__()
-        self.test_log = logging.getLogger(name or "console")
+        # formatter that mimics poetry style
+        formatter = formatters.Formatter(True)
+        formatter.add_style("error", "red", options=["bold"])
+        self.set_formatter(formatter)
 
     def log(self, msg, *args):
         """ Prints line on the screen. """
@@ -52,14 +46,13 @@ class Logger(ConsoleOutput):
         self._log(msg, Level.DEBUG, args)
 
     def _log(self, msg, level, args):
-        if "PYTEST_CURRENT_TEST" in os.environ:
-            self.test_log.log(level.as_logging(), msg, *args)
-        elif self.verbosity >= level.as_clikit():
+        if self.verbosity >= level.as_clikit():
             self.writeln(msg % args)
 
 
 logger = Logger()
 
 log = logger.log
+info = logger.info
 verbose = logger.verbose
 debug = logger.debug
