@@ -6,7 +6,7 @@ from . import VRoute, __version__, commands
 
 class Application(BaseApplication):
     def __init__(self):
-        super().__init__(name="Network servant", version=__version__)
+        super().__init__(name="VPN network router", version=__version__)
         # poetry-like errors formatter
         self._formatter = formatters.Formatter(True)
         self._formatter.add_style("error", "red", options=["bold"])
@@ -25,7 +25,6 @@ class Application(BaseApplication):
     def do_run(self, input_, output_):
         self.prepare()
         return super().do_run(input_, output_)
-
 
 
 app = Application()
