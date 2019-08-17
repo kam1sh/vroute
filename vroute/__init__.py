@@ -12,12 +12,17 @@ class VRoute:
         self.db = None
         self.lock = None
 
+    def new_session(self):
+        if self.db is None:
+            raise EnvironmentError("Database is not configured yet.")
+        return self.db.new_session()
+
     def read_config(self, file=None):
         from . import cfg
 
         self.cfg = cfg.Configuration(from_file=file)
 
-    def load_db(self, file=None, debug=None):
+    def load_db(self, file=None, debug=False):
         from . import db
 
         file = file or self.cfg.db_file

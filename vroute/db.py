@@ -2,7 +2,7 @@ from pathlib import Path
 
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, orm
 
 from .logger import verbose
 
@@ -27,12 +27,12 @@ class Database:
         verbose("Using database: <comment>%s</>", url)
         self.engine = sqlalchemy.create_engine(url, echo=debug)
         self.file = Path(file)
-        if file != MEMORY and not self.file.exists():
-            if not auto_create:
-                raise FileNotFoundError(f"File {file} does not exist.")
-            else:
-                verbose("Creating new database")
-                self.create()
+        if auto_create and not self.file.exists():
+            self.create()
 
     def create(self):
+        verbose("Creating new database schema")
         Base.metadata.create_all(self.engine)
+
+    def new_session(self):
+        return orm.Session(self.engine)

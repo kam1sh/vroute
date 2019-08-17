@@ -1,15 +1,16 @@
 from pathlib import Path
 import shutil
+import logging
 
 import pytest
 from vroute.logger import logger
-from vroute import console, VRoute
+from vroute import console, VRoute, db
 
 config_template = Path(__file__).parent.parent / "config-template.yml"
 
 
 def pytest_addoption(parser):
-    parser.addoption("--db-log", action="store_true", help="Enable database logging")
+    parser.addoption("--log-sql", action="store_true", help="Enable SQL logging")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -19,7 +20,10 @@ def vrouteobj(pytestconfig, tmp_path_factory):
     logger.set_verbosity(logger.VERBOSITY_DEBUG)
     vrobj = VRoute()
     vrobj.read_config(file=cfg_path)
-    vrobj.load_db(":memory:", debug=pytestconfig.getoption("--db-log"))
+    if pytestconfig.getoption("--log-sql"):
+        sql_log = logging.getLogger('sqlalchemy')
+        sql_log.setLevel(logging.INFO)
+    vrobj.load_db(":memory:")
     return vrobj
 
 

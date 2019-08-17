@@ -15,7 +15,8 @@ class Application(BaseApplication):
     def prepare(self, cfg=None, db=None):
         self.vroute = VRoute()
         self.vroute.read_config(file=cfg)
-        self.vroute.load_db(file=db)
+        debug = logger.is_debug()
+        self.vroute.load_db(file=db, debug=debug)
 
     def do_run(self, input_, output_) -> int:
         self.prepare()
