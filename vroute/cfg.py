@@ -14,11 +14,16 @@ except ImportError:
 
 class Configuration:
     def __init__(self, from_file=None):
-        from_file = Path(from_file) if from_file else Path.home() / ".config/vroute.yml"
+        self.file = None
+        if from_file is not None:
+            self.from_file(from_file)
+
+    def from_file(self, file):
+        from_file = Path(file)
         if not from_file.exists():
             raise ValueError(
                 f"No configuration file found in {from_file}.\n"
-                "Please create one according the config-template.yml"
+                "You may create one according the config-template.yml"
                 " in the repository root."
             )
         with from_file.open() as fd:
@@ -41,6 +46,10 @@ class Configuration:
     @property
     def db_debug(self) -> bool:
         return bool(self.get("db.debug"))
+
+    @property
+    def v6_enabled(self) -> bool:
+        return bool(self.get("ipv6"))
 
     @property
     def lock_file(self) -> Path:

@@ -1,6 +1,6 @@
 from cleo import Command
-from .db import AddressRecord
-
+from .db import Host
+from .logger import log, debug
 
 class AddRecord(Command):
     """
@@ -13,14 +13,21 @@ class AddRecord(Command):
     """
 
     def handle(self):
-        hostname = self.argument("hostname")
+        hostnames = self.argument("hostname").split()
         session = self._application.new_session()
-        if session.query(AddressRecord).first():
-            raise ValueError(f"Record {hostname} is already present")
-        record = AddressRecord()
-        record.hostname = hostname
-        if self.option("resolve"):
-            record.resolve()
-        record.comment = self.option("comment")
-        session.add(record)
+        for hostname in hostnames:
+            debug("Got hostname <info>%s</>", hostname)
+            if session.query(Host).filter(Host.name == hostname).first():
+                raise ValueError(f"Record {hostname} is already present")
+            record = Host()
+            record.name = hostname
+            record.comment = self.option("comment")
+            session.add(record)
+            if self.option("resolve"):
+                # commit to assign id to the record
+                # so foreign key could be created
+                session.commit()
+                addrs = record.resolve(v6=self._application.vroute.cfg.v6_enabled)
+                log("Using addresses <info>%s</> for <info>%s</>", addrs, hostname)
+                session.add_all(addrs)
         session.commit()

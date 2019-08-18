@@ -1,9 +1,17 @@
+from datetime import timedelta
+
 import toml
 from vroute import __version__
-from vroute.db import AddressRecord
+from vroute.db import Host, Address
+import pendulum
 
-from . import CommandTester
+from . import CommandTester, DumbFuture, AnswerStub
 
+
+def mock_future(mocker, obj, key, val):
+    mocker.patch.object(obj, key)
+    mock = getattr(obj, key)
+    mock.return_value = DumbFuture(val)
 
 def test_version():
     with open("pyproject.toml") as fp:
@@ -14,15 +22,40 @@ def test_version():
 def test_db(vrouteobj):
     """ Checks that database schema properly initialized. """
     session = vrouteobj.new_session()
-    assert not list(session.query(AddressRecord))
+    assert not list(session.query(Host))
 
 
-def test_addhost(app, session):
+def test_add_hosts(app, query):
     cmd = app.find("add")
     tester = CommandTester(cmd)
-    tester.run("hostname rutracker.org")
-    record = session.query(AddressRecord).first()
-    assert record and record.hostname == "rutracker.org"
-    assert not record.addrv4
+    tester.run("hostname 'example.com example.org'")
+    assert len(list(query(Host))) == 2
+    record = query(Host).filter(Host.name == "example.com").first()
+    assert record
+    assert record.name == "example.com"
     assert not record.expires
     assert not record.comment
+    assert query(Address).first() is None
+
+def test_add_comments(app, query):
+    cmd = app.find("add")
+    tester = CommandTester(cmd)
+    tester.run("hostname example.com --comment test")
+    assert query(Host).first().comment == "test"
+
+def test_resolve_host(mocker):
+    mock_future(mocker, Host.resolver, "query", val=[AnswerStub("1.2.3.4", 300)])
+    host = Host(name="example.com")
+    resolved = host.resolve()
+    assert len(resolved) == 1
+    resolved = resolved[0]
+    assert resolved.value == "1.2.3.4"
+    assert not resolved.v6
+    assert host.expires - pendulum.now() < timedelta(301)
+
+def test_add_resolve(mocker, app, query):
+    mock_future(mocker, Host.resolver, "query", val=[AnswerStub("1.2.3.4", 300)])
+    cmd = app.find("add")
+    tester = CommandTester(cmd)
+    tester.run("hostname example.com --resolve True")
+    assert query(Address).first()

@@ -1,24 +1,10 @@
 from pathlib import Path
 
 import sqlalchemy
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, orm
-
 from .logger import verbose
 
-Base = declarative_base()
+from .models import Base, Host, Address # pylint: disable=unused-import
 
-
-class AddressRecord(Base):
-    __tablename__ = "addresses"
-    id = Column(Integer, primary_key=True)
-    hostname = Column(String, index=True)
-    addrv4 = Column(String)
-    expires = Column(DateTime, index=True)
-    comment = Column(String)
-
-    def resolve(self):
-        raise NotImplementedError()
 
 
 MEMORY = ":memory:"
@@ -38,4 +24,4 @@ class Database:
         Base.metadata.create_all(self.engine)
 
     def new_session(self):
-        return orm.Session(self.engine)
+        return sqlalchemy.orm.Session(self.engine)
