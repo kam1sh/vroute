@@ -13,7 +13,9 @@ class AddRecord(Command):
     """
 
     def handle(self):
-        hostnames = self.argument("hostname").split()
+        hostnames = self.argument("hostname")
+        # detects malformed arguments in tests
+        assert isinstance(hostnames, list), "'--hostnames' value isn't a list."
         session = self._application.new_session()
         for hostname in hostnames:
             debug("Got hostname <info>%s</>", hostname)

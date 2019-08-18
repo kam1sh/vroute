@@ -1,5 +1,5 @@
 [[package]]
-category = "dev"
+category = "main"
 description = "Simple DNS resolver for asyncio"
 name = "aiodns"
 optional = false
@@ -66,7 +66,7 @@ click = ">=6.5"
 toml = ">=0.9.4"
 
 [[package]]
-category = "dev"
+category = "main"
 description = "Foreign Function Interface for Python calling C code."
 name = "cffi"
 optional = false
@@ -196,7 +196,7 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 version = "1.8.0"
 
 [[package]]
-category = "dev"
+category = "main"
 description = "Python interface for c-ares"
 name = "pycares"
 optional = false
@@ -207,7 +207,7 @@ version = "3.0.0"
 cffi = ">=1.5.0"
 
 [[package]]
-category = "dev"
+category = "main"
 description = "C parser in Python"
 name = "pycparser"
 optional = false
@@ -326,7 +326,7 @@ python-versions = "*"
 version = "1.4.0"
 
 [[package]]
-category = "dev"
+category = "main"
 description = "Type Hints for Python"
 marker = "python_version < \"3.7\""
 name = "typing"
@@ -367,7 +367,7 @@ python-versions = ">=2.7"
 version = "0.5.2"
 
 [metadata]
-content-hash = "527bbf82b552172030977b2ac48a0f43200f62efa1f2f1c1e65c292a4925d7dd"
+content-hash = "463f2185608f4f5006eb6657f074d5711b529180e1f86b1bcdb3cff1470c8b23"
 python-versions = "^3.6"
 
 [metadata.hashes]
