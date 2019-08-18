@@ -3,8 +3,7 @@ from pathlib import Path
 import sqlalchemy
 from .logger import verbose
 
-from .models import Base, Host, Address # pylint: disable=unused-import
-
+from .models import Base, Host, Address  # pylint: disable=unused-import
 
 
 MEMORY = ":memory:"

@@ -13,10 +13,12 @@ class CommandTester(cleo.CommandTester):
         args = list(args)
         self.execute([("command", self._command.get_name())] + args)
 
+
 class DumbFuture(asyncio.Future):
     def __init__(self, value):
         super().__init__()
         self.set_result(value)
+
 
 class AnswerStub:
     def __init__(self, host, ttl, kind="A"):

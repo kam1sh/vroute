@@ -1,9 +1,9 @@
-
 class WindowIterator:
     """
     Iterator with extras attributes, such as
     `first`, `last`, `pos` and `has_any`.
     """
+
     def __init__(self, iterable):
         self._gen = enumerate(iterable)
         self._buf = []

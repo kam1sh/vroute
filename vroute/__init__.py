@@ -19,6 +19,7 @@ class VRoute:
 
     def read_config(self, file=None):
         from . import cfg
+
         file = Path(file) if file else Path.home() / ".config/vroute.yml"
         self.cfg = cfg.Configuration(from_file=file)
 

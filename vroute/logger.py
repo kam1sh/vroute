@@ -64,6 +64,7 @@ class Logger(ConsoleOutput):
         if self.verbosity >= level.as_clikit():
             self.writeln(msg % args)
 
+
 logger = Logger()
 
 log = logger.log

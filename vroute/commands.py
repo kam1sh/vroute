@@ -68,7 +68,11 @@ class ShowRecords(Command):
     def handle(self):
         self.init_colors()
         session = self._application.new_session()
-        for host in session.query(Host):
+        gen = WindowIterator(session.query(Host))
+        if not gen.has_any:
+            log("Database is empty.")
+            return 0
+        for host in gen:
             comment = (" - " + host.comment) if host.comment else ""
             addrs = WindowIterator(
                 session.query(Address).filter(Address.host_id == host.id)
@@ -101,5 +105,5 @@ class SyncRoutes(Command):
         sync_routes(session, routeros=routeros)
 
 
-def sync_routes(session, routeros: dict=None):
+def sync_routes(session, routeros: dict = None):
     pass

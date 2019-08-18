@@ -10,11 +10,14 @@ from .logger import verbose
 
 Base = declarative_base()
 
+
 class Addresses(list):
     """ list with IPv4/v6 addresses """
+
     def __init__(self):
         super().__init__()
-        self.ttl = 604800 # default ttl = 1 week
+        self.ttl = 604_800  # default ttl = 1 week
+
 
 class Host(Base):
     __tablename__ = "hosts"
@@ -35,7 +38,7 @@ class Host(Base):
             record.v6 = addr.type == "AAAA"
             record.value = addr.host
             record.host_id = self.id
-            verbose("%s address: <info>%s</> - ttl", self.name, addr.host, )
+            verbose("%s address: <info>%s</> - ttl", self.name, addr.host)
             out.ttl = min(out.ttl, addr.ttl)
             out.append(record)
         if out:
@@ -63,4 +66,3 @@ class Address(Base):
 
     def __repr__(self):
         return f"<Address({self.value!r}>"
-
