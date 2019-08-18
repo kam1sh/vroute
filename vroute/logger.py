@@ -1,6 +1,7 @@
 import enum
+import io
 
-from cleo.outputs import Output, ConsoleOutput
+from cleo.outputs import Output, ConsoleOutput, StreamOutput
 from cleo import formatters
 
 
@@ -29,10 +30,23 @@ class Logger(ConsoleOutput):
         formatter = formatters.Formatter(True)
         formatter.add_style("error", "red", options=["bold"])
         self.set_formatter(formatter)
+        self._tee = None
+
+    def enable_storage(self):
+        """ Enables log storage for testing purposes. """
+        self._tee = StreamOutput(io.BytesIO())
+
+    def display_output(self):
+        writer = self._tee.get_stream()
+        writer.seek(0)
+        display = writer.read().decode("utf-8")
+        return display
 
     def log(self, msg, *args):
         """ Prints line on the screen. """
         self._log(msg, Level.ALL, args)
+        if self._tee is not None:
+            self._tee.writeln(msg % args)
 
     def info(self, msg, *args):
         """ Prints line on the screen with the level `INFO`. """
@@ -49,7 +63,6 @@ class Logger(ConsoleOutput):
     def _log(self, msg, level, args):
         if self.verbosity >= level.as_clikit():
             self.writeln(msg % args)
-
 
 logger = Logger()
 

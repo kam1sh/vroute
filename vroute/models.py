@@ -6,6 +6,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 import aiodns
 
+from .logger import verbose
+
 Base = declarative_base()
 
 class Addresses(list):
@@ -33,6 +35,7 @@ class Host(Base):
             record.v6 = addr.type == "AAAA"
             record.value = addr.host
             record.host_id = self.id
+            verbose("%s address: <info>%s</> - ttl", self.name, addr.host, )
             out.ttl = min(out.ttl, addr.ttl)
             out.append(record)
         if out:

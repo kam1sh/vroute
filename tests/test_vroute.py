@@ -3,9 +3,24 @@ from datetime import timedelta
 import toml
 from vroute import __version__
 from vroute.db import Host, Address
+from vroute.logger import logger
+from vroute.util import WindowIterator
 import pendulum
 
 from . import CommandTester, DumbFuture, AnswerStub
+
+
+def example_data(session):
+    host = Host()
+    host.name = "example.com"
+    host.expires = pendulum.now().add(seconds=300)
+    session.add(host)
+    session.commit()
+    addr = Address()
+    addr.host_id = host.id
+    addr.value = "1.2.3.4"
+    session.add(addr)
+    session.commit()
 
 
 def mock_future(mocker, obj, key, val):
@@ -13,6 +28,27 @@ def mock_future(mocker, obj, key, val):
     mock = getattr(obj, key)
     mock.return_value = DumbFuture(val)
 
+# # # # # # #
+# utilities #
+# # # # # # #
+
+def test_window():
+    lst = [1, 2, 3, 4]
+    gen = WindowIterator(lst)
+    for x in gen:
+        if x == 1:
+            assert gen.first
+        else:
+            assert not gen.first
+        if x in {2, 3}:
+            assert gen.has_any
+            assert not gen.first and not gen.last
+        if x == 4:
+            assert not gen.first and gen.last
+    assert list(WindowIterator([1]))
+    gen = WindowIterator([1])
+    for _ in gen:
+        assert gen.last
 
 def test_version():
     with open("pyproject.toml") as fp:
@@ -25,9 +61,9 @@ def test_db(vrouteobj):
     session = vrouteobj.new_session()
     assert not list(session.query(Host))
 
-# # # # # # # # #
-# 'add' command #
-# # # # # # # # #
+# # # # # # # # # # # # # # #
+# 'add' and 'del' commands  #
+# # # # # # # # # # # # # # #
 
 def test_add_hosts(app, query):
     cmd = app.find("add")
@@ -67,18 +103,37 @@ def test_add_resolve(mocker, app, query):
     tester.run(("hostname", ["example.com"]), ("--resolve", True))
     assert query(Address).first()
 
+def test_del_hosts(app, session):
+    example_data(session)
+    cmd = app.find("remove")
+    tester = CommandTester(cmd)
+    tester.run(("hostname", ["example.com"]))
+    assert not session.query(Host).first()
+
+# # # # # # # # # #
+# 'show' command  #
+# # # # # # # # # #
+
+def test_show(session, app):
+    example_data(session)
+    cmd = app.find("show")
+    tester = CommandTester(cmd)
+    tester.run()
+    assert logger
+
+    expected = """\
+example.com
+    └── 1.2.3.4
+"""
+    assert logger.display_output() == expected
+
+def test_show_resolved(session, app):
+    pass
+
 # # # # # # # # # #
 # 'sync' command  #
 # # # # # # # # # #
 
 def test_add_table(mocker, session):
-    host = Host()
-    host.name = "example.com"
-    host.expires = pendulum.now().add(seconds=300)
-    session.add(host)
-    session.commit()
-    addr = Address()
-    addr.host_id = host.id
-    addr.value = "1.2.3.4"
-    session.add(host)
-    session.commit()
+    example_data(session)
+

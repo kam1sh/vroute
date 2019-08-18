@@ -9,6 +9,9 @@ class Application(BaseApplication):
     def __init__(self):
         super().__init__(name="VPN network router", version=__version__)
         self.add(commands.AddRecord())
+        self.add(commands.RemoveRecord())
+        self.add(commands.ShowRecords())
+        self.add(commands.SyncRoutes())
         self.vroute: VRoute = None
 
     def prepare(self, cfg=None, db=None):

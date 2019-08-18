@@ -50,6 +50,7 @@ def vrouteobj(pytestconfig, config):
 
 @pytest.fixture(autouse=True)
 def wipe_database(vrouteobj):
+    logger.enable_storage()
     engine = vrouteobj.db.engine
     db.Base.metadata.drop_all(bind=engine)
     db.Base.metadata.create_all(bind=engine)
