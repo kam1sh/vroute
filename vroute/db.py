@@ -12,10 +12,13 @@ Base = declarative_base()
 class AddressRecord(Base):
     __tablename__ = "addresses"
     id = Column(Integer, primary_key=True)
-    hostname = Column(String, nullable=False, index=True)
-    resolved_addr = Column(String)
-    expires = Column(DateTime)
+    hostname = Column(String, index=True)
+    addrv4 = Column(String)
+    expires = Column(DateTime, index=True)
     comment = Column(String)
+
+    def resolve(self):
+        raise NotImplementedError()
 
 
 MEMORY = ":memory:"

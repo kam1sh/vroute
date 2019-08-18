@@ -21,7 +21,7 @@ def vrouteobj(pytestconfig, tmp_path_factory):
     vrobj = VRoute()
     vrobj.read_config(file=cfg_path)
     if pytestconfig.getoption("--log-sql"):
-        sql_log = logging.getLogger('sqlalchemy')
+        sql_log = logging.getLogger("sqlalchemy")
         sql_log.setLevel(logging.INFO)
     vrobj.load_db(":memory:")
     return vrobj
@@ -32,3 +32,8 @@ def app(vrouteobj):
     app = console.Application()
     app.vroute = vrouteobj
     return app
+
+
+@pytest.fixture
+def session(app):
+    return app.new_session()

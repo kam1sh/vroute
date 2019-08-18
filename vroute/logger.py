@@ -3,6 +3,7 @@ import enum
 from cleo.outputs import Output, ConsoleOutput
 from cleo import formatters
 
+
 class Level(enum.IntEnum):
     ALL = 1
     VERBOSE = 2
