@@ -157,12 +157,3 @@ example.com
     └── No addresses resolved yet.
 """
     assert logger.display_output() == expected
-
-
-# # # # # # # # # #
-# 'sync' command  #
-# # # # # # # # # #
-
-
-def test_add_table(mocker, session):
-    example_data(session)

@@ -1,9 +1,11 @@
 from cleo import Command
+import pendulum
 import pyroute2
 
 from .db import Host, Address
-from .logger import log, debug
+from .logger import log, verbose, debug
 from .util import WindowIterator
+from . import routing
 
 
 class AddRecord(Command):
@@ -34,8 +36,12 @@ class AddRecord(Command):
                 # so foreign key could be created
                 session.commit()
                 addrs = record.resolve(v6=self._application.vroute.cfg.v6_enabled)
-                log("Using addresses <info>%s</> for <info>%s</>", addrs, hostname)
+                log(
+                    "Using addresses <info>%s</> for <info>%s</>", addrs, hostname
+                )
                 session.add_all(addrs)
+            else:
+                log("Record <info>%s</> added.", hostname)
         session.commit()
 
 
@@ -90,6 +96,9 @@ class ShowRecords(Command):
             self.set_style(color, fg=color)
 
 
+from pprint import pprint
+
+
 class SyncRoutes(Command):
     """
     Synchronize internal database with the system routing table.
@@ -98,12 +107,34 @@ class SyncRoutes(Command):
         { --routeros : If set, also synchronize with the RouterOS routing table. }
     """
 
+    def session(self):
+        return self._application.new_session()
+
     def handle(self):
-        config = self._application.vroute.cfg.get("routeros")
+        config = self._application.vroute.cfg
+        priority = config.get("vpn.rule.priority")
+        if priority is None:
+            raise ValueError("Please specify rule priority in the configuration file.")
+        table = config.get("vpn.table_id")
+        if table is None:
+            raise ValueError("Please specify table ID in the configuration file.")
+        # routeros = config.get("routeros") if self.option("routeros") else None
         session = self._application.new_session()
-        routeros = config if self.option("routeros") else None
-        sync_routes(session, routeros=routeros)
+        query = session.query
+        with pyroute2.IPRoute() as ipr:
+            try:
+                routing.add_rule(priority=priority, table_id=table, iproute=ipr)
+            except (routing.MultipleRulesExists, routing.DifferentRuleExists) as e:
+                log("<warn>%s</>", e)
+            except routing.RuleExistsError as e:
+                verbose("%s", e)
+            # TODO resolve addresses
+            # TODO remove old routes
+            # TODO add new routes
 
-
-def sync_routes(session, routeros: dict = None):
-    pass
+    def resolve(self):
+        session = self.session()
+        for host in session.query(Host):
+            resolved = host.resolve_if_needs()
+            session.add_all(resolved)
+            session.commit()

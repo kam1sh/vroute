@@ -1,11 +1,9 @@
 vpn:
+  table_id: 10
   rule:
-    name: vpn
     priority: 40
   route_to:
     interface: tun0
-    # also acceptable
-    # address: 10.8.0.1
 
 
 routeros:

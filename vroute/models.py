@@ -6,7 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 import aiodns
 
-from .logger import verbose
+from .logger import verbose, debug
 
 Base = declarative_base()
 
@@ -51,6 +51,11 @@ class Host(Base):
         result = loop.run_until_complete(coro)
         return result
 
+    def resolve_if_needs(self, v6=False):
+        if self.expires is None or self.expires < now():
+            return []
+        return resolve(v6=v6)
+
     def __repr__(self):
         return f"<Host({self.name!r})>"
 
@@ -66,3 +71,31 @@ class Address(Base):
 
     def __repr__(self):
         return f"<Address({self.value!r}>"
+
+
+class Rule:
+    def __init__(self, table, priority):
+        self.table = table
+        self.priority = priority
+
+    @classmethod
+    def fromdict(cls, raw: dict):
+        attrs = dict(raw["attrs"])
+        debug("Rule attrs: %s", attrs)
+        return cls(table=raw["table"], priority=attrs["FRA_PRIORITY"])
+
+    def create(self, iproute):
+        self._action(iproute, action="add")
+
+    def remove(self, iproute):
+        self._action(iproute, action="del")
+
+    def _action(self, iproute, action):
+        resp = iproute.rule(
+            action, src="0.0.0.0/0", table=self.table, priority=self.priority
+        )
+        if resp:
+            debug("Rule %s event response: %s", action, resp[0].get("event"))
+
+    def __repr__(self):
+        return f"<Rule({self.table!r})>"

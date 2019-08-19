@@ -24,7 +24,6 @@ class Application(BaseApplication):
         return self.vroute.new_session()
 
     def do_run(self, input_, output_) -> int:
-        print(input_)
         self.prepare()
         with self.vroute:
             return super().do_run(input_, output_)
