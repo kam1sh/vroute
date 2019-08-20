@@ -2,8 +2,9 @@ from pathlib import Path
 import cleo
 from cleo import formatters
 from .logger import debug
+import os
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 
 
 class VRoute:
@@ -19,7 +20,8 @@ class VRoute:
 
     def read_config(self, file=None):
         from . import cfg
-
+        # environment variable has the second priority
+        file = file or os.getenv("VROUTE_CONFIG")
         file = Path(file) if file else Path.home() / ".config/vroute.yml"
         self.cfg = cfg.Configuration(from_file=file)
 

@@ -37,7 +37,7 @@ class Configuration:
 
     @property
     def db_file(self) -> str:
-        url = self.get("db.url")
+        url = self.get("db.file")
         if not url:
             folder = self.get_appdir()
             url = str(folder.joinpath("db.sqlite3").absolute())
