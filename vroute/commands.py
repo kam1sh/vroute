@@ -138,7 +138,7 @@ class SyncRoutes(Command):
             # what routes are up to date
             current = ipr.get_routes(table=table)
             to_skip = addresses.remove_outdated(current, ipr)
-            verbose("table=%s, oif=%s", table, interface.num)
+            info("table=%s, oif=%s", table, interface.num)
             # 5. Add new routes to the server routing table
             addresses.add_routes(
                 to_skip,
@@ -151,6 +151,7 @@ class SyncRoutes(Command):
             raise ValueError(
                 "To sync with routeros, specify connection and routing settings."
             )
+        log("Processing RouterOS table %s", ros["table"])
         conn = routeros_api.RouterOsApiPool(
             ros["addr"], username=ros["username"], password=ros["password"]
         )
@@ -161,6 +162,7 @@ class SyncRoutes(Command):
         info("RouterOS has %s routes.", len(current))
         # current = list(map(RosRoute.fromdict, response))
         to_skip = addresses.remove_outdated(current, api, route_class=RosRoute)
+        addresses.add_routes(to_skip, adder=lambda x: RosRoute(x, via=ros["vpn_addr"], table=ros["table"]).create(api))
 
 
 def resolve_hosts(session) -> Addresses:

@@ -6,7 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 import aiodns
 
-from .logger import log, verbose, debug
+from .logger import log, verbose, info, debug
 
 Base = declarative_base()
 
@@ -33,10 +33,10 @@ class Addresses(set):
         for addr in tuple(current.keys()):
             if addr in self:
                 # route already added, skipping
-                verbose("Route %s is up to date.", addr)
+                info("Route %s is up to date.", addr)
                 to_skip.add(addr)
                 continue
-            verbose("Removing route %s", addr)
+            info("Removing route %s", addr)
             current[addr].remove(ipr)
             del current[addr]
             outdated += 1
@@ -48,10 +48,13 @@ class Addresses(set):
         return to_skip
 
     def add_routes(self, skip_list, adder):
+        added = 0
         for addr in filter(lambda x: x not in skip_list, self):
             addr = addr.with_prefix()
-            debug("Appending address %r", addr)
+            verbose("Appending address %r", addr)
             adder(addr)
+            added += 1
+        log("Added %s routes.", added)
 
 
 class IpMixin:
