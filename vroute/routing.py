@@ -1,9 +1,9 @@
 from .logger import log, debug
 
-from .models import Rule
+from .models import Addresses, Rule, Host, Route, Interface
 
 
-def add_rule(priority, table_id, iproute):
+def add_rule(table_id, priority, iproute):
     """ Adds new rule for all addresses with lookup to a specified table. """
     rules = iproute.get_rules()
     targets = []
@@ -22,15 +22,43 @@ def add_rule(priority, table_id, iproute):
         raise MultipleRulesExists(targets)
 
 
-def add_routes(query, session, ip, config):
-    table_name = config.get("vpn.rule.name")
-    for host in query(Host):
-        if not host.expires or host.expires < pendulum.now():
-            resolved = host.resolve()
-            session.add_all(resolved)
-            session.commit()
-        for addr in query(Address).filter(Address.host_id == host.id):
-            ip.route("add", dst=f"{addr}/32", dev="tun0", table=config)
+def remove_outdated(addresses: set, table: int, interface, ipr):
+    """
+    Applies all addresses to the specified routing table:
+    removes outdated, creates all new.
+    Note: This function changes addresses list.
+    """
+    current = ipr.get_routes(table=table)
+    current = {x.dst: x for x in map(Route.fromdict, current)}
+    # remove all that's not in the db
+    outdated, skipped = 0, 0
+    for outdated, route in enumerate(current):
+        import pdb
+
+        pdb.set_trace()
+        if route not in addresses:
+            route.remove()
+        else:
+            # route already exist, skip it in the future
+            addresses.remove(route.dst)
+            skipped += 1
+    log("Removed <info>%s</> outdated routes, <info>%s</> skipped.", outdated, skipped)
+
+
+def find_interface(ipr, name):
+    interfaces = [x for x in map(Interface, ipr.get_links()) if x.name == name]
+    if not interfaces:
+        raise ValueError(f"Failed to find interface with name {name!r}.")
+    # elif len(interfaces) > 1:
+    #     raise ValueError("It can't be!")
+    return interfaces[0]
+
+
+# def add_routes(addresses, table, interface, ipr)
+
+# # # # # # # # # #
+# Rule exceptions #
+# # # # # # # # # #
 
 
 class RuleError(ValueError):

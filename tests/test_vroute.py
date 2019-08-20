@@ -1,19 +1,17 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 import toml
-from vroute import __version__
+from vroute import __version__, commands
 from vroute.db import Host, Address
+from vroute.cfg import Configuration
 from vroute.logger import logger
 from vroute.util import WindowIterator
-import pendulum
 
 from . import CommandTester, DumbFuture, AnswerStub
 
 
 def example_data(session):
-    host = Host()
-    host.name = "example.com"
-    host.expires = pendulum.now().add(seconds=300)
+    host = Host(name="example.com", expires=datetime.now() + timedelta(seconds=300))
     session.add(host)
     session.commit()
     addr = Address()
@@ -59,10 +57,25 @@ def test_version():
     assert __version__ == toml_version
 
 
+def test_config():
+    cfg = Configuration()
+    cfg.file = {"key": {"key2": {"key3": "value"}}}
+    assert cfg.get("key.key2.key3") == "value"
+
+
 def test_db(vrouteobj):
     """ Checks that database schema properly initialized. """
     session = vrouteobj.new_session()
     assert not list(session.query(Host))
+
+
+def test_address():
+    assert str(Address(value="192.168.0.1/32")) == "192.168.0.1"
+    addr = Address(value="192.168.0.1")
+    assert addr == "192.168.0.1/32"
+    assert addr == "192.168.0.1"
+    assert addr == Address(value="192.168.0.1")
+    assert addr == Address(value="192.168.0.1/32")
 
 
 # # # # # # # # # # # # # # #
@@ -95,10 +108,19 @@ def test_resolve_host(mocker):
     host = Host(name="example.com")
     resolved = host.resolve()
     assert len(resolved) == 1
-    resolved = resolved[0]
+    resolved = resolved.pop()
     assert resolved.value == "1.2.3.4"
     assert not resolved.v6
-    assert host.expires - pendulum.now() < timedelta(301)
+    assert host.expires - datetime.now() < timedelta(301)
+
+
+def test_resolve_hosts(session, mocker):
+    mock_future(mocker, Host.resolver, "query", val=[AnswerStub("1.2.3.4", 300)])
+    host = Host(name="example.com", expires=datetime.now())
+    session.add(host)
+    session.commit()
+    commands.resolve_hosts(session)
+    assert session.query(Address).first()
 
 
 def test_add_resolve(mocker, app, query):
@@ -143,9 +165,7 @@ example.com
 
 
 def test_show_unresolved(session, app):
-    host = Host()
-    host.name = "example.com"
-    host.expires = pendulum.now().add(seconds=300)
+    host = Host(name="example.com", expires=datetime.now())
     session.add(host)
     session.commit()
 

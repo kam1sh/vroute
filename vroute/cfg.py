@@ -70,7 +70,7 @@ class Configuration:
         if not keys:
             return None
         val = self.file.get(keys.pop(0))
-        for key in pth.split("."):
+        for key in keys:
             if not hasattr(val, "get"):
                 return None
             val = val.get(key)
