@@ -9,5 +9,6 @@ vpn:
 routeros:
   addr: <router address>
   vpn_addr: <address to forward routes>
+  table: vpn
   username:
   password:

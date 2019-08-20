@@ -75,3 +75,8 @@ def test_interface(interface):
     assert iface.name == "tun0"
     assert iface.state == "up"
     assert iface.num == 7
+
+# TODO sync 1 new route
+# mock get_routes and add_route
+
+# TODO remove 1 outdated route

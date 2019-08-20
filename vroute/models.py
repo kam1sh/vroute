@@ -88,7 +88,7 @@ class Host(Base):
             record.v6 = addr.type == "AAAA"
             record.value = addr.host
             record.host_id = self.id
-            verbose("%s address: <info>%s</> - ttl", self.name, addr.host)
+            verbose("%s address: <info>%s</>, ttl=<info>%ss</>", self.name, addr.host, addr.ttl)
             out.ttl = min(out.ttl, addr.ttl)
             out.add(record)
         self.expires = datetime.now() + timedelta(seconds=out.ttl)
