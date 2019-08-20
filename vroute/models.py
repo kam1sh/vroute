@@ -29,7 +29,7 @@ class Addresses(set):
         to_skip = set()
         # remove all that's not in the db
         outdated = 0
-        for outdated, addr in enumerate(tuple(current.keys())):
+        for addr in tuple(current.keys()):
             if addr in self:
                 # route already added, skipping
                 verbose("Route %s is up to date.", addr)
@@ -38,6 +38,7 @@ class Addresses(set):
             verbose("Removing route %s", addr)
             current[addr].remove(ipr)
             del current[addr]
+            outdated += 1
         log(
             "Removed <info>%s</> outdated routes, <info>%s</> are up to date.",
             outdated,
@@ -45,14 +46,20 @@ class Addresses(set):
         )
         return to_skip
 
-    def add_routes(self, skip_list, callable):
+    def add_routes(self, skip_list, adder):
         for addr in filter(lambda x: x not in skip_list, self):
-            # import pdb; pdb.set_trace()
-            callable(f"{addr.value}/32")
+            addr = addr.with_prefix()
+            debug("Appending address %r", addr)
+            adder(addr)
 
 
 class IpMixin:
     _v4_pattern = re.compile(r"([\d\.]+)(/32)?")
+
+    def _with_prefix(self, value):
+        if not value.endswith("/32"):
+            return f"{value}/32"
+        return value
 
     def unprefix(self, addr):
         match = self._v4_pattern.match(addr)
@@ -119,6 +126,9 @@ class Address(Base, IpMixin):
     )
     value = Column(String)
 
+    def with_prefix(self):
+        return self._with_prefix(self.value)
+
     def __str__(self):
         """ Returns address without prefix. """
         if self.v6:
@@ -171,27 +181,33 @@ class Rule:
 
 
 class Route:
-    __slots__ = ("dst", "via")
+    __slots__ = ("dst", "via", "table")
 
-    def __init__(self, dst: str, via: int):
+    def __init__(self, dst: str, via: int, table: int):
         self.dst = dst
         self.via = via
+        self.table = table
 
     @classmethod
     def fromdict(cls, raw: dict):
         attrs = dict(raw["attrs"])
         debug("Route attrs: %s", attrs)
         via = attrs["RTA_OIF"]
-        return cls(dst=attrs["RTA_DST"], via=via)
+        return cls(dst=attrs["RTA_DST"], via=via, table=raw["table"])
 
     def remove(self, iproute):
         self._action(iproute, "del")
 
     def _action(self, iproute, action):
-        debug("dst=%s; oif=%s", self.dst, self.via)
-        resp = iproute.route(action, dst=self.dst, oif=self.via)
+        dst = self.with_prefix()
+        debug("dst=%s; oif=%s", dst, self.via)
+        resp = iproute.route(action, dst=dst, oif=self.via, table=self.table)
         debug("response: %s", resp)
 
+    def with_prefix(self):
+        if not self.dst.endswith("/32"):
+            return f"{self.dst}/32"
+        return self.dst
 
 class Interface:
     def __init__(self, raw):

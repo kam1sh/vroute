@@ -3,7 +3,7 @@ import cleo
 from cleo import formatters
 from .logger import debug
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 
 class VRoute:

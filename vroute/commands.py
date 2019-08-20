@@ -137,14 +137,13 @@ class SyncRoutes(Command):
             addresses = resolve_hosts(session)
             current = ipr.get_routes(table=table)
             to_skip = addresses.remove_outdated(current, ipr)
+            verbose("table=%s, oif=%s", table, interface.num)
             addresses.add_routes(
                 to_skip,
-                callable=lambda x: ipr.route(
+                adder=lambda x: ipr.route(
                     "add", dst=x, oif=interface.num, table=table
                 ),
             )
-            # routing.add_routes(addresses, table, interface.num, ipr)
-            # TODO add new routes
             # TODO sync with mikrotik
 
 
