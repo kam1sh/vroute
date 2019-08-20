@@ -1,11 +1,12 @@
 from cleo import Command
 import pyroute2
+import routeros_api
 
 from .db import Host, Address
-from .logger import log, verbose, debug
+from .logger import log, verbose, info
 from .util import WindowIterator
 from . import routing
-from .models import Addresses
+from .models import Addresses, RosRoute
 
 
 class AddRecord(Command):
@@ -24,7 +25,7 @@ class AddRecord(Command):
         assert isinstance(hostnames, list), "'--hostnames' value isn't a list."
         session = self._application.new_session()
         for hostname in hostnames:
-            debug("Got hostname <info>%s</>", hostname)
+            info("Got hostname <info>%s</>", hostname)
             if session.query(Host).filter(Host.name == hostname).first():
                 raise ValueError(f"Record {hostname} is already present")
             record = Host()
@@ -116,7 +117,6 @@ class SyncRoutes(Command):
         interface = config.get("vpn.route_to.interface")
         if not interface:
             raise ValueError("Please specify interface in the configuration file.")
-        # routeros = config.get("routeros") if self.option("routeros") else None
         return table, priority, interface
 
     def handle(self):
@@ -134,17 +134,33 @@ class SyncRoutes(Command):
                 log("<warn>%s</>", e)
             except routing.RuleExistsError as e:
                 verbose("%s", e)
-            addresses = resolve_hosts(session)
+            # 4. Get current routes, remove outdated and find
+            # what routes are up to date
             current = ipr.get_routes(table=table)
             to_skip = addresses.remove_outdated(current, ipr)
             verbose("table=%s, oif=%s", table, interface.num)
+            # 5. Add new routes to the server routing table
             addresses.add_routes(
                 to_skip,
-                adder=lambda x: ipr.route(
-                    "add", dst=x, oif=interface.num, table=table
-                ),
+                adder=lambda x: ipr.route("add", dst=x, oif=interface.num, table=table),
             )
-            # TODO sync with mikrotik
+        if not self.option("routeros"):
+            return
+        ros = self._application.vroute.cfg.get("routeros")
+        if ros is None:
+            raise ValueError(
+                "To sync with routeros, specify connection and routing settings."
+            )
+        conn = routeros_api.RouterOsApiPool(
+            ros["addr"], username=ros["username"], password=ros["password"]
+        )
+        info("Connection established.")
+        api = conn.get_api()
+        params = {"routing-mark": ros["table"]}
+        current = api.get_resource("/ip/route").get(**params)
+        info("RouterOS has %s routes.", len(current))
+        # current = list(map(RosRoute.fromdict, response))
+        to_skip = addresses.remove_outdated(current, api, route_class=RosRoute)
 
 
 def resolve_hosts(session) -> Addresses:

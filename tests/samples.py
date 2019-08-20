@@ -334,3 +334,20 @@ INTERFACE = {
     "index": 7,
     "state": "up",
 }
+
+
+ROS_ROUTE = {
+    "active": "true",
+    "comment": "Rutracker",
+    "disabled": "false",
+    "distance": "1",
+    "dst-address": "195.82.146.214/32",
+    "gateway": "192.168.100.35",
+    "gateway-status": "192.168.100.35 reachable via  bridge",
+    "id": "*6",
+    "routing-mark": "vpn",
+    "scope": "30",
+    "static": "true",
+    "target-scope": "10",
+}
+

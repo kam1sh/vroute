@@ -20,12 +20,13 @@ class Addresses(set):
         # to resolve after 10 minutes
         self.ttl = 300
 
-    def remove_outdated(self, current_table: list, ipr):
+    def remove_outdated(self, current_table: list, ipr, route_class=None):
         """
         Removes outdated address both from the table provided and the routing table,
         and returns what addresses you may skip.
         """
-        current = {x.dst: x for x in map(Route.fromdict, current_table)}
+        route_class = route_class or Route
+        current = {x.without_prefix(): x for x in map(route_class.fromdict, current_table)}
         to_skip = set()
         # remove all that's not in the db
         outdated = 0
@@ -88,7 +89,12 @@ class Host(Base):
             record.v6 = addr.type == "AAAA"
             record.value = addr.host
             record.host_id = self.id
-            verbose("%s address: <info>%s</>, ttl=<info>%ss</>", self.name, addr.host, addr.ttl)
+            verbose(
+                "%s address: <info>%s</>, ttl=<info>%ss</>",
+                self.name,
+                addr.host,
+                addr.ttl,
+            )
             out.ttl = min(out.ttl, addr.ttl)
             out.add(record)
         self.expires = datetime.now() + timedelta(seconds=out.ttl)
@@ -180,7 +186,7 @@ class Rule:
         return f"<Rule({self.table!r})>"
 
 
-class Route:
+class Route(IpMixin):
     __slots__ = ("dst", "via", "table")
 
     def __init__(self, dst: str, via: int, table: int):
@@ -208,6 +214,40 @@ class Route:
         if not self.dst.endswith("/32"):
             return f"{self.dst}/32"
         return self.dst
+
+    def without_prefix(self):
+        return self.unprefix(self.dst)
+
+class RosRoute(Route):
+    __slots__ = ("dst", "via", "table", "id")
+
+    def __init__(self, dst, via, table, id_=None):
+        super().__init__(dst, via, table)
+        self.id = id_
+
+    @classmethod
+    def fromdict(cls, raw: dict):
+        return cls(
+            dst=raw["dst-address"],
+            via=raw["gateway"],
+            table=raw["routing-mark"],
+            id_=raw["id"],
+        )
+
+    def remove(self, api):
+        resp = api.get_resource("/ip/route").remove(id=self.id)
+        debug("ROS response: %s", resp)
+
+    def create(self, api):
+        params = {
+            "dst-address": self.with_prefix(),
+            "gateway": self.via,
+            "routing-mark": self.table,
+        }
+        debug("Create route arguments: %s", params)
+        resp = api.get_resource("/ip/route").add(**params)
+        debug("ROS response: %s", resp)
+
 
 class Interface:
     def __init__(self, raw):
