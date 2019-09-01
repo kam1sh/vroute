@@ -3,6 +3,9 @@ kind: pipeline
 type: docker
 name: default
 
+clone:
+  skip_verify: true
+
 steps:
 - name: build
   image: python:3.6-alpine
