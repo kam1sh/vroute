@@ -64,7 +64,7 @@ def test_db(vrouteobj):
 
 
 def test_address():
-    assert str(Address(value="192.168.0.1/32")) == "192.168.0.1"
+    assert Address(value="192.168.0.1/32") == "192.168.0.1"
     addr = Address(value="192.168.0.1")
     assert addr == "192.168.0.1/32"
     assert addr == "192.168.0.1"

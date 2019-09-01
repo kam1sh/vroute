@@ -132,7 +132,6 @@ class Host(Base):
 
 
 class Address(Base, IpMixin):
-    _v4_pattern = re.compile(r"([\d\.]+)(/32)?")
     __tablename__ = "addresses"
     id = Column(Integer, primary_key=True)
     v6 = Column(Boolean, default=False)
@@ -154,13 +153,14 @@ class Address(Base, IpMixin):
         # both have prefix or both doesn't
         if self.value == value:
             return True
+        if self.with_prefix().endswith("/32") and self.unprefix(self.value) == value:
+            return True
         if self.with_prefix() == value:
             return True
         try:
             value = value.with_prefix()
         except:
             return False
-        return str(self) == value
 
     def __hash__(self):
         return hash(self.value)
