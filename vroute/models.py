@@ -1,3 +1,4 @@
+import logging
 import asyncio
 from datetime import timedelta, datetime
 import re
@@ -6,13 +7,12 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 import aiodns
 
-from .logger import log, verbose, info, debug
-
 Base = declarative_base()
+log = logging.getLogger(__name__)
 
 
 class Addresses(set):
-    """ list with IPv4/v6 addresses """
+    """ list with resolved IPv4/v6 addresses """
 
     def __init__(self):
         super().__init__()
@@ -20,45 +20,51 @@ class Addresses(set):
         # to resolve after 10 minutes
         self.ttl = 300
 
-    def remove_outdated(self, current_table: list, ipr, route_class=None):
+    def _get_current(self, table: list, clazz=None) -> dict:
+        """  """
+        route_class = clazz or Route
+        return {x.without_prefix(): x for x in map(route_class.fromdict, table)}
+
+    def what_to_skip(self, current_table: dict) -> set:
+        to_skip = set()
+        for addr in tuple(current_table.keys()):
+            if addr in self:
+                to_skip.add(addr)
+        return to_skip
+
+    def remove_outdated(self, current_table: list, conn, route_class=None):
         """
         Removes outdated address both from the table provided and the routing table,
-        and returns what addresses you may skip.
         """
-        route_class = route_class or Route
-        current = {x.without_prefix(): x for x in map(route_class.fromdict, current_table)}
-        to_skip = set()
+        current = self._get_current(current_table, route_class)
         # remove all that's not in the db
-        outdated = 0
         for addr in tuple(current.keys()):
             if addr in self:
-                # route already added, skipping
-                info("Route %s is up to date.", addr)
-                to_skip.add(addr)
                 continue
-            info("Removing route %s", addr)
-            current[addr].remove(ipr)
+            log.info("Removing route %s", addr)
+            current[addr].remove(conn)
             del current[addr]
-            outdated += 1
-        log(
-            "Removed <info>%s</> outdated routes, <info>%s</> are up to date.",
-            outdated,
-            len(to_skip),
+
+    def add_routeros_routes(self, api, ros_cfg: dict, to_skip=None):
+        self.add_routes(
+            to_skip or [],
+            adder=lambda x: RosRoute(
+                x, via=ros_cfg["vpn_addr"], table=ros_cfg["table"]
+            ).create(api),
         )
-        return to_skip
 
     def add_routes(self, skip_list, adder):
         added = 0
         for addr in filter(lambda x: x not in skip_list, self):
             addr = addr.with_prefix()
-            verbose("Appending address %r", addr)
+            log.info("Appending address %r", addr)
             adder(addr)
             added += 1
-        log("Added %s routes.", added)
+        log.info("Added %s routes.", added)
 
 
 class IpMixin:
-    _v4_pattern = re.compile(r"([\d\.]+)(/32)?")
+    _v4_pattern = re.compile(r"([\d.]+)(/\d+)?")
 
     def _with_prefix(self, value):
         if not value.endswith("/32"):
@@ -82,9 +88,9 @@ class Host(Base):
 
     resolver = aiodns.DNSResolver(loop=asyncio.get_event_loop())
 
-    async def aresolve(self, v6=False, resolver=None) -> list:
+    async def aresolve(self, v6=False, resolver=None) -> set:
         resolver = resolver or self.resolver
-        answer = await resolver.query(self.name, "AAAA" if v6 is True else "A")
+        answer = await resolver.query(self.name, "AAAA" if v6 else "A")
         out = Addresses()
         # there may be multiple IP addresses per hostname
         for addr in answer:
@@ -92,7 +98,7 @@ class Host(Base):
             record.v6 = addr.type == "AAAA"
             record.value = addr.host
             record.host_id = self.id
-            verbose(
+            log.debug(
                 "%s address: <info>%s</>, ttl=<info>%ss</>",
                 self.name,
                 addr.host,
@@ -109,7 +115,7 @@ class Host(Base):
         result = loop.run_until_complete(coro)
         return result
 
-    def addresses(self, session, v6=False):
+    async def addresses(self, session, v6=False):
         """
         Resolve and return new addresses if TTL expired,
         otherwise returns existing addresses.
@@ -117,7 +123,7 @@ class Host(Base):
         addrs = session.query(Address).filter(Address.host_id == self.id)
         if self.expires is None or self.expires < datetime.now():
             addrs.delete()
-            addrs = self.resolve(v6=v6)
+            addrs = await self.aresolve(v6=v6)
             session.add_all(addrs)
         return addrs
 
@@ -142,15 +148,17 @@ class Address(Base, IpMixin):
         """ Returns address without prefix. """
         if self.v6:
             raise NotImplementedError()
-        return self.unprefix(self.value)
+        return self.with_prefix()
 
     def __eq__(self, value):
         # both have prefix or both doesn't
         if self.value == value:
             return True
+        if self.with_prefix() == value:
+            return True
         try:
-            value = self.unprefix(value)
-        except ValueError:
+            value = value.with_prefix()
+        except:
             return False
         return str(self) == value
 
@@ -169,21 +177,18 @@ class Rule:
     @classmethod
     def fromdict(cls, raw: dict):
         attrs = dict(raw["attrs"])
-        debug("Rule attrs: %s", attrs)
+        log.debug("Rule attrs: %s", attrs)
         return cls(table=raw["table"], priority=attrs.get("FRA_PRIORITY"))
 
     def create(self, iproute):
         self._action(iproute, action="add")
-
-    def remove(self, iproute):
-        self._action(iproute, action="del")
 
     def _action(self, iproute, action):
         resp = iproute.rule(
             action, src="0.0.0.0/0", table=self.table, priority=self.priority
         )
         if resp:
-            debug("Rule %s event response: %s", action, resp[0].get("event"))
+            log.debug("Rule %s event response: %s", action, resp[0].get("event"))
 
     def __repr__(self):
         return f"<Rule({self.table!r})>"
@@ -200,7 +205,7 @@ class Route(IpMixin):
     @classmethod
     def fromdict(cls, raw: dict):
         attrs = dict(raw["attrs"])
-        debug("Route attrs: %s", attrs)
+        log.debug("Route attrs: %s", attrs)
         via = attrs["RTA_OIF"]
         return cls(dst=attrs["RTA_DST"], via=via, table=raw["table"])
 
@@ -209,9 +214,9 @@ class Route(IpMixin):
 
     def _action(self, iproute, action):
         dst = self.with_prefix()
-        debug("dst=%s; oif=%s", dst, self.via)
+        log.debug("dst=%s; oif=%s", dst, self.via)
         resp = iproute.route(action, dst=dst, oif=self.via, table=self.table)
-        debug("response: %s", resp)
+        log.debug("response: %s", resp)
 
     def with_prefix(self):
         if not self.dst.endswith("/32"):
@@ -220,6 +225,7 @@ class Route(IpMixin):
 
     def without_prefix(self):
         return self.unprefix(self.dst)
+
 
 class RosRoute(Route):
     __slots__ = ("dst", "via", "table", "id")
@@ -239,7 +245,7 @@ class RosRoute(Route):
 
     def remove(self, api):
         resp = api.get_resource("/ip/route").remove(id=self.id)
-        debug("ROS response: %s", resp)
+        log.debug("ROS response: %s", resp)
 
     def create(self, api):
         params = {
@@ -247,9 +253,9 @@ class RosRoute(Route):
             "gateway": self.via,
             "routing-mark": self.table,
         }
-        debug("Create route arguments: %s", params)
+        log.debug("Create route arguments: %s", params)
         resp = api.get_resource("/ip/route").add(**params)
-        debug("ROS response: %s", resp)
+        log.debug("ROS response: %s", resp)
 
 
 class Interface:

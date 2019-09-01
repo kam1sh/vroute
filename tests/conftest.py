@@ -1,11 +1,12 @@
 from copy import deepcopy
 from pathlib import Path
-import shutil
 import logging
 
 import pytest
-from vroute.logger import logger
+from vroute import web
 from vroute import console, VRoute, db, cfg
+
+from . import Helpers
 
 config_template = Path(__file__).parent.parent / "config-template.yml"
 
@@ -22,7 +23,7 @@ CONFIG = dict(
 )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def config():
     config = cfg.Configuration()
     config.file = deepcopy(CONFIG)
@@ -30,40 +31,43 @@ def config():
 
 
 @pytest.fixture(autouse=True)
-def reload_config(config):
-    config.file = deepcopy(CONFIG)
-
-
-@pytest.fixture(scope="session", autouse=True)
 def vrouteobj(pytestconfig, config):
-    logger.set_verbosity(logger.VERBOSITY_DEBUG)
     vrobj = VRoute()
     vrobj.cfg = config
     if pytestconfig.getoption("--log-sql"):
         sql_log = logging.getLogger("sqlalchemy")
         sql_log.setLevel(logging.INFO)
     vrobj.load_db(":memory:")
+    console.get_vroute = lambda: vrobj
     return vrobj
 
 
 @pytest.fixture(autouse=True)
 def wipe_database(vrouteobj):
-    logger.enable_storage()
     engine = vrouteobj.db.engine
     db.Base.metadata.drop_all(bind=engine)
     db.Base.metadata.create_all(bind=engine)
 
 
-@pytest.fixture(scope="session")
-def app(vrouteobj):
-    app = console.Application()
-    app.vroute = vrouteobj
-    return app
+@pytest.fixture
+def session(vrouteobj):
+    return vrouteobj.db.new_session()
 
 
 @pytest.fixture
-def session(app):
-    return app.new_session()
+def helpers(mocker, vrouteobj, session, loop, aiohttp_client):
+    webapp = web.get_webapp(app=vrouteobj)
+    return Helpers(
+        mocker,
+        session=session,
+        requests=loop.run_until_complete(aiohttp_client(webapp)),
+    )
+
+
+@pytest.fixture
+def cli(loop, aiohttp_client):
+    app = web.get_webapp(loop)
+    return loop.run_until_complete(aiohttp_client(app))
 
 
 @pytest.fixture

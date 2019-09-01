@@ -9,41 +9,6 @@ from . import routing
 from .models import Addresses, RosRoute
 
 
-class AddRecord(Command):
-    """
-    Adds a new record to the database.
-
-    add
-        { hostname* : FQDNs to add. }
-        { --resolve : If set, hostnames will be automatically resolved upon save. }
-        { --comment= : Comment. }
-    """
-
-    def handle(self):
-        hostnames = self.argument("hostname")
-        # detects malformed arguments in tests
-        assert isinstance(hostnames, list), "'--hostnames' value isn't a list."
-        session = self._application.new_session()
-        for hostname in hostnames:
-            info("Got hostname <info>%s</>", hostname)
-            if session.query(Host).filter(Host.name == hostname).first():
-                raise ValueError(f"Record {hostname} is already present")
-            record = Host()
-            record.name = hostname
-            record.comment = self.option("comment")
-            session.add(record)
-            if self.option("resolve"):
-                # commit to assign id to the record
-                # so foreign key could be created
-                session.commit()
-                addrs = record.resolve(v6=self._application.vroute.cfg.v6_enabled)
-                log("Using addresses <info>%s</> for <info>%s</>", addrs, hostname)
-                session.add_all(addrs)
-            else:
-                log("Record <info>%s</> added.", hostname)
-        session.commit()
-
-
 class RemoveRecord(Command):
     """
     Removes hostname from the database.
@@ -61,38 +26,6 @@ class RemoveRecord(Command):
                 raise ValueError(f"Host {val} does not exist.")
             session.delete(val)
         session.commit()
-
-
-class ShowRecords(Command):
-    """
-    Shows saved records.
-
-    show
-    """
-
-    def handle(self):
-        self.init_colors()
-        session = self._application.new_session()
-        gen = WindowIterator(session.query(Host))
-        if not gen.has_any:
-            log("Database is empty.")
-            return 0
-        for host in gen:
-            comment = (" - " + host.comment) if host.comment else ""
-            addrs = WindowIterator(
-                session.query(Address).filter(Address.host_id == host.id)
-            )
-            log(f"<info>{host.name}</info>{comment}")
-            if addrs.has_any:
-                for addr in addrs:
-                    symbol = "├──" if not addrs.last else "└──"
-                    log(f"    {symbol} <fg=green>{addr.value}</>")
-            else:
-                log("    └── <fg=cyan>No addresses resolved yet.</>")
-
-    def init_colors(self):
-        for color in ["green", "cyan"]:
-            self.set_style(color, fg=color)
 
 
 class SyncRoutes(Command):
@@ -162,14 +95,19 @@ class SyncRoutes(Command):
         info("RouterOS has %s routes.", len(current))
         # current = list(map(RosRoute.fromdict, response))
         to_skip = addresses.remove_outdated(current, api, route_class=RosRoute)
-        addresses.add_routes(to_skip, adder=lambda x: RosRoute(x, via=ros["vpn_addr"], table=ros["table"]).create(api))
+        addresses.add_routes(
+            to_skip,
+            adder=lambda x: RosRoute(x, via=ros["vpn_addr"], table=ros["table"]).create(
+                api
+            ),
+        )
 
 
-def resolve_hosts(session) -> Addresses:
+async def resolve_hosts(session) -> Addresses:
     # set of Address objects
     addresses = Addresses()
     for host in session.query(Host):
-        host_addrs = host.addresses(session)
+        host_addrs = await host.addresses(session)
         for addr in host_addrs:
             addresses.add(addr)
     session.commit()

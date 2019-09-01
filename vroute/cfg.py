@@ -52,6 +52,10 @@ class Configuration:
         return bool(self.get("ipv6"))
 
     @property
+    def listen_port(self):
+        return self.get("listen_port") or "1015"
+
+    @property
     def lock_file(self) -> Path:
         file = self.get("lock_file")
         return Path(file) if file else self.get_appdir().joinpath("lock")

@@ -6,8 +6,6 @@ from vroute import routing
 
 import pyroute2
 
-from . import CommandTester
-from .test_vroute import example_data
 from .samples import ROUTE, RULE, RULE_RESPONSE, INTERFACE
 
 # # # # # # # # # #
@@ -75,6 +73,7 @@ def test_interface(interface):
     assert iface.name == "tun0"
     assert iface.state == "up"
     assert iface.num == 7
+
 
 # TODO sync 1 new route
 # mock get_routes and add_route

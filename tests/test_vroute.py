@@ -7,7 +7,7 @@ from vroute.cfg import Configuration
 from vroute.logger import logger
 from vroute.util import WindowIterator
 
-from . import CommandTester, DumbFuture, AnswerStub
+from . import DumbFuture, AnswerStub
 
 
 def example_data(session):
@@ -19,12 +19,6 @@ def example_data(session):
     addr.value = "1.2.3.4"
     session.add(addr)
     session.commit()
-
-
-def mock_future(mocker, obj, key, val):
-    mocker.patch.object(obj, key)
-    mock = getattr(obj, key)
-    mock.return_value = DumbFuture(val)
 
 
 # # # # # # #
@@ -83,17 +77,16 @@ def test_address():
 # # # # # # # # # # # # # # #
 
 
-def test_add_hosts(app, query):
-    cmd = app.find("add")
-    tester = CommandTester(cmd)
-    tester.run(("hostname", ["example.com", "example.org"]))
-    assert len(list(query(Host))) == 2
+async def test_add_hosts(helpers, query):
+    helpers.mock_resolve("1.2.3.4")
+    await helpers.post("/", host="example.com")
+    assert len(list(query(Host))) == 1
     record = query(Host).filter(Host.name == "example.com").first()
     assert record
     assert record.name == "example.com"
-    assert not record.expires
+    assert datetime.now() < record.expires < datetime.now() + timedelta(seconds=300)
     assert not record.comment
-    assert query(Address).first() is None
+    assert query(Address).first()
 
 
 def test_add_comments(app, query):

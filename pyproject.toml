@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vroute"
-version = "0.3.0"
+version = "0.4.0"
 description = ""
 authors = ["Igor Ovsyannikov <kamish@outlook.com>"]
 
@@ -14,6 +14,9 @@ aiodns = "^2.0"
 pyroute2 = "^0.5.6"
 pytest-cov = "^2.7"
 routeros-api = "^0.15.0"
+click = "^7.0"
+requests = "^2.22"
+aiohttp = "^3.5"
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.0"
@@ -25,6 +28,7 @@ virtualenv = "^16.7"
 pytest-mock = "^1.10"
 more-itertools = "^7.2"
 aiodns = "^2.0"
+pytest-aiohttp = "^0.3.0"
 
 [tool.poetry.scripts]
 vroute = "vroute.console:main"

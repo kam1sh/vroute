@@ -1,31 +1,23 @@
 import enum
 import io
+import logging
 
+import click
 from cleo.outputs import Output, ConsoleOutput, StreamOutput
 from cleo import formatters
 
 
 class Level(enum.IntEnum):
-    ALL = 1
+    NORMAL = 1
     VERBOSE = 2
     INFO = 3
     DEBUG = 4
-
-    def as_clikit(self):
-        return _clikit_levels[self.value]
-
-
-_clikit_levels = {
-    1: Output.VERBOSITY_NORMAL,
-    2: Output.VERBOSITY_VERBOSE,
-    3: Output.VERBOSITY_VERY_VERBOSE,
-    4: Output.VERBOSITY_DEBUG,
-}
 
 
 class Logger(ConsoleOutput):
     def __init__(self):
         super().__init__()
+        self.level = Level.NORMAL
         # formatter that mimics poetry style
         formatter = formatters.Formatter(True)
         formatter.add_style("error", "red", options=["bold"])
@@ -44,7 +36,7 @@ class Logger(ConsoleOutput):
 
     def log(self, msg, *args):
         """ Prints line on the screen. """
-        self._log(msg, Level.ALL, args)
+        self._log(msg, Level.NORMAL, args)
         if self._tee is not None:
             self._tee.writeln(msg % args)
 
@@ -61,8 +53,8 @@ class Logger(ConsoleOutput):
         self._log(msg, Level.DEBUG, args)
 
     def _log(self, msg, level, args):
-        if self.verbosity >= level.as_clikit():
-            self.writeln(msg % args)
+        if self.level >= level:
+            click.echo(msg % args)
 
 
 logger = Logger()
