@@ -63,7 +63,7 @@ class Helpers:
         RouteManager.get_links.return_value = (iface,)
 
     def mock_routes(self, *addresses, table=10, oif_num=7, netmask=32):
-        self.mocker.patch.object(RouteManager, "get_routes")
+        mock_netlink(self.mocker.patch)
         routes = []
         for address in addresses:
             route = deepcopy(samples.ROUTE)
@@ -75,13 +75,9 @@ class Helpers:
             route["dst_len"] = netmask
             routes.append(route)
         RouteManager.get_routes.return_value = routes
-        self.mocker.patch.object(RouteManager, "route")
 
     def mock_ros_routes(self, *addresses, table="vpn", via="127.0.0.2"):
-        self.mocker.patch.object(RouterosManager, "get_api")
-        self.mocker.patch.object(RouterosManager, "get_raw_routes")
-        self.mocker.patch.object(RouterosManager, "_add_route")
-        self.mocker.patch.object(RouterosManager, "_rm_route")
+        mock_ros(self.mocker.patch)
         routes = []
         for i, address in enumerate(addresses, start=1):
             route = deepcopy(samples.ROS_ROUTE)
@@ -101,3 +97,17 @@ class Helpers:
     def invoke(self, *args):
         runner = click.testing.CliRunner()
         return runner.invoke(console.cli, args)
+
+def mock_network(patch):
+    mock_ros(patch)
+
+def mock_netlink(patch):
+    patch.object(RouteManager, "get_routes")
+    patch.object(RouteManager, "route")
+
+
+def mock_ros(patch):
+    patch.object(RouterosManager, "get_api")
+    patch.object(RouterosManager, "get_raw_routes")
+    patch.object(RouterosManager, "_add_route")
+    patch.object(RouterosManager, "_rm_route")

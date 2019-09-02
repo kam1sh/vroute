@@ -1,18 +1,17 @@
 import logging
-import typing as ty
 
 from aiohttp import web
 
 from .db import Host, Address
 from .util import WindowIterator
-from . import routing
+from . import routing, VRoute
 from .models import Addresses
 
 log = logging.getLogger(__name__)
 
 
 class Handlers:
-    def __init__(self, app):
+    def __init__(self, app: VRoute):
         self.app = app
 
     def session(self):
@@ -73,25 +72,26 @@ class Handlers:
 
     async def sync(self, request):
         """ Synchronizes routing tables with database. """
-        ipr = routing.RouteManager.fromconf(self.app.cfg)
         session = self.session()
         # Fetch all hosts and their IP addresses
         addresses = await Addresses.fromdb(session)
         json = {}
-        with ipr:
-            # Check routing rule and add if it doesn't exist
-            ipr.check_rule()
-            # Find what routes are up to date
-            to_skip = addresses.what_to_skip(ipr.current)
-            # Add new routes to the server routing table
-            json["added"], json["skipped"] = ipr.add_all(addresses, to_skip)
-        ros = self.app.cfg.get("routeros")
+        ipr = self.app.netlink
+        # update routing information
+        ipr.update()
+        # Check routing rule and add if it doesn't exist
+        ipr.check_rule()
+        # Find what routes are up to date
+        to_skip = addresses.what_to_skip(ipr.current)
+        # Add new routes to the server routing table
+        json["added"], json["skipped"] = ipr.add_all(addresses, to_skip)
+        ros = self.app.ros
         if ros:
-            with routing.RouterosManager.fromconf(ros) as conn:
-                current = conn.get_routes()
-                to_skip = addresses.what_to_skip(current)
-                conn.add_routes(addresses, to_skip=to_skip)
-                # addresses.add_routeros_routes(conn.api, ros_cfg=ros, to_skip=to_skip)
+            ros.update()
+            current = ros.get_routes()
+            to_skip = addresses.what_to_skip(current)
+            ros.add_routes(addresses, to_skip=to_skip)
+            # addresses.add_routeros_routes(conn.api, ros_cfg=ros, to_skip=to_skip)
             json["full"] = True
         return web.json_response(json)
 
@@ -99,10 +99,10 @@ class Handlers:
         """ Removes routes that aren't present in the database. """
         session = self.session()
         addresses = await Addresses.fromdb(session)
-        with routing.RouteManager.fromconf(self.app.cfg) as ipr:
-            count = ipr.remove_outdated(keep=addresses)
-        with routing.RouterosManager.fromconf(self.app.cfg.get("routeros")) as ros:
-            ros_count = ros.remove_outdated(keep=addresses)
+        self.app.netlink.update()
+        count = self.app.netlink.remove_outdated(keep=addresses)
+        self.app.ros.update()
+        ros_count = self.app.ros.remove_outdated(keep=addresses)
         return web.json_response({"removed": count, "removed_ros": ros_count})
 
 

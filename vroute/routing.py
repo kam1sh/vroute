@@ -3,6 +3,7 @@ import typing as ty
 
 import pyroute2
 import routeros_api
+import routeros_api.resource
 
 from .models import Addresses, Rule, Host, Route, RosRoute, Interface
 from .util import with_netmask
@@ -16,10 +17,14 @@ class RouteManager(pyroute2.IPRoute):
     def __init__(self, interface: str, table: int, priority: int):
         super().__init__()
         self._interface = interface
-        self.interface = self.find_interface(interface)
         self.table = table
         self.priority = priority
-        self.current: ty.List[Route] = list(self.show_routes())
+        self.interface: ty.Optional[Interface] = None
+        self.current: ty.Optional[ty.List[Route]] = None
+
+    def update(self):
+        self.interface = self.find_interface(self._interface)
+        self.current = list(self.show_routes())
 
     def show_rules(self) -> ty.Iterable[Rule]:
         return map(Rule.fromdict, self.get_rules())
@@ -97,8 +102,12 @@ class RouterosManager(routeros_api.RouterOsApiPool):
     def __init__(self, addr, username, password, table, vpn_host, **kwargs):
         super().__init__(addr, username, password, **kwargs)
         self.table = table
-        self.api = self.get_api()
         self.vpn_host = vpn_host
+        self.api: ty.Optional[routeros_api.api.RouterOsApi] = None
+        self._route: ty.Optional[routeros_api.resource.RouterOsResource] = None
+
+    def update(self):
+        self.api = self.get_api()
         self._route = self.api.get_resource("/ip/route")
 
     # moved in method for mocking

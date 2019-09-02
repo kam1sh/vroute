@@ -6,7 +6,7 @@ import pytest
 from vroute import web
 from vroute import console, VRoute, db, cfg
 
-from . import Helpers
+from . import Helpers, mock_network
 
 config_template = Path(__file__).parent.parent / "config-template.yml"
 
@@ -34,8 +34,8 @@ def config():
     return config
 
 
-@pytest.fixture(autouse=True)
-def vrouteobj(pytestconfig, config):
+@pytest.yield_fixture(autouse=True)
+def vrouteobj(pytestconfig, config, mocker):
     vrobj = VRoute()
     vrobj.cfg = config
     if pytestconfig.getoption("--log-sql"):
@@ -43,7 +43,10 @@ def vrouteobj(pytestconfig, config):
         sql_log.setLevel(logging.INFO)
     vrobj.load_db(":memory:")
     console.get_vroute = lambda: vrobj
-    return vrobj
+    mock_network(mocker.patch)
+    vrobj.connect()
+    yield vrobj
+    vrobj.disconnect()
 
 
 @pytest.fixture(autouse=True)

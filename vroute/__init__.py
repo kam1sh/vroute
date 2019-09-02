@@ -4,7 +4,9 @@ from pathlib import Path
 
 import requests
 
-__version__ = "0.4.1"
+from .routing import RouterosManager, RouteManager
+
+__version__ = "0.5.0"
 
 log = logging.getLogger(__name__)
 
@@ -14,6 +16,19 @@ class VRoute:
         self.cfg = None
         self.db = None
         self.lock = None
+        self.netlink = None
+        self.ros = None
+
+    def connect(self):
+        self.netlink = RouteManager.fromconf(self.cfg)
+        ros = self.cfg.get("routeros")
+        if ros:
+            self.ros = RouterosManager.fromconf(ros)
+
+    def disconnect(self):
+        self.netlink.close()
+        if self.ros:
+            self.ros.disconnect()
 
     def new_session(self):
         if self.db is None:
@@ -59,13 +74,17 @@ class VRoute:
             web.run_app(webapp, host="127.0.0.1", port=1015)
 
     def __enter__(self):
+        self.connect()
         lock = self.cfg.lock_file
         log.debug("Obtaining lock file <comment>%s</>", lock)
         if lock.exists():
             raise EnvironmentError(f"Lock file {lock} exists.")
         self.lock = lock.open("w")
+        return self
 
     def __exit__(self, exc_type, value, tb):
         log.debug("Releasing lock file")
         self.lock.close()
         self.cfg.lock_file.unlink()
+        self.disconnect()
+
