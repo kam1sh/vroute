@@ -4,7 +4,7 @@ import logging
 import click
 from cleo import formatters, Application as BaseApplication
 
-from . import VRoute, __version__, commands
+from . import VRoute, __version__
 from .web import get_webapp
 from .util import WindowIterator
 

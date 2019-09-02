@@ -17,7 +17,10 @@ class RouteManager(pyroute2.IPRoute):
         self.interface = find_interface(self, interface)
         self.table = table
         self.priority = priority
-        self.current = self.get_routes()
+        self.current = self.show_routes()
+
+    def show_rules(self) -> ty.Iterable["Rule"]:
+        return map(Rule.fromdict, self.get_rules())
 
     def check_rule(self, priority: int = None):
         priority = priority or self.priority
@@ -30,11 +33,11 @@ class RouteManager(pyroute2.IPRoute):
         except RuleExistsError as e:
             log.info(e)
 
-    def get_routes(
-        self, family=255, match=None, table=None, **kwarg
+    def show_routes(
+        self, **kwargs
     ) -> ty.Dict[str, Route]:
         """ Returns dictionary of addresses without prefix in VPN (or other) table. """
-        out = super().get_routes(family, match, table=table or self.table, **kwarg)
+        out = self.get_routes(table=self.table, **kwargs)
         return {x.without_prefix(): x for x in map(Route.fromdict, out)}
 
     def add(self, addr: Route):
@@ -51,8 +54,18 @@ class RouteManager(pyroute2.IPRoute):
                 skipped += 1
                 continue
             self.add(addr)
-            self.added += 1
+            added += 1
         return added, skipped
+
+    def remove_outdated(self, keep: ty.Collection[str]) -> int:
+        current = self.show_routes()
+        removed = 0
+        for route in current:
+            if route in keep:
+                continue
+            self.route("del", dst=f"{route}/32", oif=self.interface.num, table=self.table)
+            removed += 1
+        return removed
 
     @classmethod
     def fromconf(cls, cfg: dict):
@@ -74,10 +87,44 @@ class RouterosManager(routeros_api.RouterOsApiPool):
         self.table = table
         self.api = self.get_api()
         self.vpn_host = vpn_host
+        self._route = self.api.get_resource("/ip/route")
+
+    # moved in method for mocking
+    def get_raw_routes(self):
+        return self._route.get(**{"routing-mark": self.table})
 
     def get_routes(self) -> ty.Dict[str, RosRoute]:
-        resp = self.api.get_resource("/ip/route").get(**{"routing-mark": self.table})
+        resp = self.get_raw_routes()
         return {x.without_prefix(): x for x in map(RosRoute.fromdict, resp)}
+
+    def _add_route(self, params: dict):
+        return self._route.add(**params)
+
+    def _rm_route(self, id_):
+        return self._route.remove(id=id_)
+
+    def add_routes(self, addresses: ty.Iterable, to_skip: ty.Collection):
+        for addr in addresses:
+            if addr in to_skip:
+                continue
+            params = {
+                "dst-address": addr.with_prefix(),
+                "gateway": self.vpn_host,
+                "routing-mark": self.table,
+            }
+            log.debug("Create route arguments: %s", params)
+            resp = self._add_route(params)
+            log.debug("ROS response: %s", resp)
+
+    def remove_outdated(self, keep: ty.Collection[str]) -> int:
+        current = self.get_routes()
+        removed = 0
+        for rstr, route in current.items():
+            if rstr in keep:
+                continue
+            self._rm_route(route.id)
+            removed += 1
+        return removed
 
     def __enter__(self):
         return self
@@ -100,14 +147,10 @@ class RouterosManager(routeros_api.RouterOsApiPool):
 
 def add_rule(table_id, priority, iproute):
     """ Adds new rule for all addresses with lookup to a specified table. """
-    rules = iproute.get_rules()
-    targets = []
-    for rule in map(Rule.fromdict, rules):
-        if rule.table == table_id:
-            targets.append(rule)
+    targets = [rule for rule in iproute.show_rules() if rule.table == table_id]
     if not targets:
         # create new rule if there is no any
-        Rule(table=table_id, priority=priority).create(iproute)
+        iproute.rule(action="add", table=table_id, priority=priority)
     elif len(targets) == 1:
         if targets[0].priority == priority:
             raise RuleExistsError(targets[0])

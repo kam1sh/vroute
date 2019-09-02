@@ -1,25 +1,12 @@
 from datetime import timedelta, datetime
 
+import pytest
 import toml
-from vroute import __version__, commands
+from vroute import __version__
+from vroute.routing import RouteManager, RouterosManager
 from vroute.db import Host, Address
 from vroute.cfg import Configuration
-from vroute.logger import logger
 from vroute.util import WindowIterator
-
-from . import DumbFuture, AnswerStub
-
-
-def example_data(session):
-    host = Host(name="example.com", expires=datetime.now() + timedelta(seconds=300))
-    session.add(host)
-    session.commit()
-    addr = Address()
-    addr.host_id = host.id
-    addr.value = "1.2.3.4"
-    session.add(addr)
-    session.commit()
-
 
 # # # # # # #
 # utilities #
@@ -78,8 +65,12 @@ def test_address():
 
 
 async def test_add_hosts(helpers, query):
+    """ Checks adding and resolving new host """
+    helpers.mock_rule(rule_exists=True)
     helpers.mock_resolve("1.2.3.4")
     await helpers.post("/", host="example.com")
+    assert not RouteManager.get_rules.called
+    assert not RouteManager.rule.called
     assert len(list(query(Host))) == 1
     record = query(Host).filter(Host.name == "example.com").first()
     assert record
@@ -89,47 +80,20 @@ async def test_add_hosts(helpers, query):
     assert query(Address).first()
 
 
-def test_add_comments(app, query):
-    cmd = app.find("add")
-    tester = CommandTester(cmd)
-    tester.run(("hostname", ["example.com"]), ("--comment", "test"))
+@pytest.mark.skip("not implemented")
+async def test_add_comments(helpers, query):
+    helpers.mock_resolve("1.2.3.4")
+    await helpers.post("/", host="example.com", comment="test")
     assert query(Host).first().comment == "test"
 
 
-def test_resolve_host(mocker):
-    mock_future(mocker, Host.resolver, "query", val=[AnswerStub("1.2.3.4", 300)])
-    host = Host(name="example.com")
-    resolved = host.resolve()
-    assert len(resolved) == 1
-    resolved = resolved.pop()
-    assert resolved.value == "1.2.3.4"
-    assert not resolved.v6
-    assert host.expires - datetime.now() < timedelta(301)
-
-
-def test_resolve_hosts(session, mocker):
-    mock_future(mocker, Host.resolver, "query", val=[AnswerStub("1.2.3.4", 300)])
-    host = Host(name="example.com", expires=datetime.now())
-    session.add(host)
-    session.commit()
-    commands.resolve_hosts(session)
-    assert session.query(Address).first()
-
-
-def test_add_resolve(mocker, app, query):
-    mock_future(mocker, Host.resolver, "query", val=[AnswerStub("1.2.3.4", 300)])
-    cmd = app.find("add")
-    tester = CommandTester(cmd)
-    tester.run(("hostname", ["example.com"]), ("--resolve", True))
+async def test_del_hosts(helpers, session, query):
+    """ Check that /rm removes only host and doesn't touch Address """
+    helpers.add_host("example.com", "1.2.3.4")
     assert query(Address).first()
-
-
-def test_del_hosts(app, session):
-    example_data(session)
-    cmd = app.find("remove")
-    tester = CommandTester(cmd)
-    tester.run(("hostname", ["example.com"]))
-    assert not session.query(Host).first()
+    await helpers.post("/rm", host="example.com")
+    assert not query(Host).first()
+    assert not query(Address).first()
 
 
 # # # # # # # # # #
@@ -137,36 +101,15 @@ def test_del_hosts(app, session):
 # # # # # # # # # #
 
 
-def test_show_empty(app):
-    cmd = app.find("show")
-    tester = CommandTester(cmd)
-    tester.run()
-    expected = "Database is empty.\n"
-    assert logger.display_output() == expected
+async def test_show_empty(helpers, query):
+    response = await helpers.get("/")
+    assert response.status == 204
 
 
-def test_show(session, app):
-    example_data(session)
-    cmd = app.find("show")
-    tester = CommandTester(cmd)
-    tester.run()
-    expected = """\
-example.com
-    └── 1.2.3.4
-"""
-    assert logger.display_output() == expected
-
-
-def test_show_unresolved(session, app):
-    host = Host(name="example.com", expires=datetime.now())
-    session.add(host)
-    session.commit()
-
-    cmd = app.find("show")
-    tester = CommandTester(cmd)
-    tester.run()
-    expected = """\
-example.com
-    └── No addresses resolved yet.
-"""
-    assert logger.display_output() == expected
+async def test_show(helpers, query):
+    helpers.add_host("example.com", "1.2.3.4")
+    response = await helpers.get("/")
+    assert response.status == 200
+    assert await response.json() == {
+        "example.com": {"addrs": ["1.2.3.4"], "comment": None}
+    }

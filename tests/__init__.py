@@ -1,10 +1,14 @@
 import asyncio
+from copy import deepcopy
 from datetime import timedelta, datetime
 from json import dumps as jsondump
 
 import click.testing
-from vroute import console, web
+from vroute import console, routing
+from vroute.routing import RouteManager, RouterosManager
 from vroute.models import Host, Address
+
+from . import samples
 
 
 class DumbFuture(asyncio.Future):
@@ -43,6 +47,50 @@ class Helpers:
         self.mocker.patch.object(Host.resolver, "query")
         mock = Host.resolver.query
         mock.return_value = future
+
+    def mock_rule(self, exists=True):
+        self.mocker.patch.object(RouteManager, "get_rules")
+        # priority=40, table=10
+        rules = (deepcopy(samples.RULE),) if exists else tuple()
+        RouteManager.get_rules.return_value = rules
+        self.mocker.patch.object(RouteManager, "rule")
+
+    def mock_interface(self, name="tun0", number=7):
+        self.mocker.patch.object(RouteManager, "get_links")
+        iface = deepcopy(samples.INTERFACE)
+        iface["attrs"] = [("IFLA_IFNAME", name)]
+        iface["index"] = number
+        RouteManager.get_links.return_value = (iface,)
+
+    def mock_routes(self, *addresses, table=10, oif_num=7, netmask=32):
+        self.mocker.patch.object(RouteManager, "get_routes")
+        routes = []
+        for address in addresses:
+            route = deepcopy(samples.ROUTE)
+            route["attrs"] = [
+                ("RTA_TABLE", table),
+                ("RTA_DST", address),
+                ("RTA_OIF", oif_num),
+            ]
+            route["dst_len"] = netmask
+            routes.append(route)
+        RouteManager.get_routes.return_value = routes
+        self.mocker.patch.object(RouteManager, "route")
+
+    def mock_ros_routes(self, *addresses, table="vpn", via="127.0.0.2"):
+        self.mocker.patch.object(RouterosManager, "get_api")
+        self.mocker.patch.object(RouterosManager, "get_raw_routes")
+        self.mocker.patch.object(RouterosManager, "_add_route")
+        self.mocker.patch.object(RouterosManager, "_rm_route")
+        routes = []
+        for i, address in enumerate(addresses, start=1):
+            route = deepcopy(samples.ROS_ROUTE)
+            route["dst-address"] = address + "/32"
+            route["gateway"] = via
+            route["routing-mark"] = table
+            route["id"] = f"*{i}"
+            routes.append(route)
+        RouterosManager.get_raw_routes.return_value = routes
 
     def get(self, url, params=None):
         return self.requests.get(url, params=params)

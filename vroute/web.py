@@ -6,7 +6,7 @@ from aiohttp import web
 from .db import Host, Address
 from .util import WindowIterator
 from . import routing
-from .commands import resolve_hosts
+from .models import Addresses
 
 log = logging.getLogger(__name__)
 
@@ -49,11 +49,15 @@ class Handlers:
         host = session.query(Host).filter(Host.name == host).first()
         if host is None:
             return web.json_response({"error": "Host not found."}, status=404)
+        log.info("Removing host %s", host.id)
+        # TODO figure out why CASCADE doesn't work
+        host.get_addresses(session).delete()
         session.delete(host)
         session.commit()
         return web.Response(status=204)
 
     async def show(self, request):
+        """ Shows database contents. """
         session = self.session()
         gen = WindowIterator(session.query(Host))
         if not gen.has_any:
@@ -68,6 +72,7 @@ class Handlers:
         return web.json_response(output)
 
     async def sync(self, request):
+        """ Synchronizes routing tables with database. """
         ipr = routing.RouteManager.fromconf(self.app.cfg)
         session = self.session()
         # Fetch all hosts and their IP addresses
@@ -85,21 +90,24 @@ class Handlers:
             with routing.RouterosManager.fromconf(ros) as conn:
                 current = conn.get_routes()
                 to_skip = addresses.what_to_skip(current)
-                addresses.add_routeros_routes(conn.api, ros_cfg=ros, to_skip=to_skip)
+                conn.add_routes(addresses, to_skip=to_skip)
+                # addresses.add_routeros_routes(conn.api, ros_cfg=ros, to_skip=to_skip)
             json["full"] = True
         return web.json_response(json)
 
     async def purge(self, request):
-        try:
-            ipr = routing.RouteManager.fromconf(self.app.cfg)
-        except ValueError as e:
-            return web.json_response({"error": str(e)}, status=500)
+        """ Removes routes that aren't present in the database. """
         session = self.session()
         addresses = await resolve_hosts(session)
-        with ipr:
-            current = ipr.get_routes()
-            addresses.remove_outdated(current, ipr)
-        # with routing.RouterosManager.fromconf(self.app.cfg["routeros"])
+        with routing.RouteManager.fromconf(self.app.cfg) as ipr:
+            count = ipr.remove_outdated(keep=addresses)
+        with routing.RouterosManager.fromconf(self.app.cfg.get("routeros")) as ros:
+            ros_count = ros.remove_outdated(keep=addresses)
+        return web.json_response({"removed": count, "removed_ros": ros_count})
+
+
+async def resolve_hosts(session) -> Addresses:
+    return await Addresses.fromdb(session)
 
 
 def get_webapp(app):

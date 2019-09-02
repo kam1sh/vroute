@@ -1,11 +1,12 @@
+import logging
 import os
 from pathlib import Path
 
 import requests
 
-from .logger import debug, log
-
 __version__ = "0.4.0"
+
+log = logging.getLogger(__name__)
 
 
 class VRoute:
@@ -36,7 +37,7 @@ class VRoute:
             json=json,
         )
         if check_resp and not response.ok:
-            debug("Request info:\nparams: %s\ndata: %s", params, data)
+            log.debug("Request info:\nparams: %s\ndata: %s", params, data)
             raise ValueError(f"Error executing request {method} {url}")
         return response
 
@@ -59,12 +60,12 @@ class VRoute:
 
     def __enter__(self):
         lock = self.cfg.lock_file
-        debug("Obtaining lock file <comment>%s</>", lock)
+        log.debug("Obtaining lock file <comment>%s</>", lock)
         if lock.exists():
             raise EnvironmentError(f"Lock file {lock} exists.")
         self.lock = lock.open("w")
 
     def __exit__(self, exc_type, value, tb):
-        debug("Releasing lock file")
+        log.debug("Releasing lock file")
         self.lock.close()
         self.cfg.lock_file.unlink()

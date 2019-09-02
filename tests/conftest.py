@@ -16,9 +16,13 @@ def pytest_addoption(parser):
 
 
 CONFIG = dict(
-    vpn=dict(rule={"name": "vpn", "priority": 40}, route_to={"interface": "tun0"}),
+    vpn=dict(table_id=10, rule={"priority": 40}, route_to={"interface": "tun0"}),
     routeros=dict(
-        addr="127.0.0.1", vpn_addr="127.0.0.2", username="admin", password=""
+        addr="127.0.0.1",
+        vpn_addr="127.0.0.2",
+        table="vpn",
+        username="admin",
+        password="",
     ),
 )
 
