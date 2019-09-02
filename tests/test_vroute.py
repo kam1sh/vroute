@@ -2,11 +2,11 @@ from datetime import timedelta, datetime
 
 import pytest
 import toml
-from vroute import __version__
+from vroute import __version__, models
 from vroute.routing import RouteManager, RouterosManager
 from vroute.db import Host, Address
 from vroute.cfg import Configuration
-from vroute.util import WindowIterator
+from vroute.util import WindowIterator, with_netmask
 
 # # # # # # #
 # utilities #
@@ -59,14 +59,26 @@ def test_address():
     assert addr == Address(value="192.168.0.1/32")
 
 
+def test_v4parser():
+    assert with_netmask("192.168.0.1") == "192.168.0.1/32"
+    assert with_netmask("192.168.0.1/32") == "192.168.0.1/32"
+
+
+def test_addresses():
+    addresses = models.Addresses()
+    addresses.add(Address(value="192.168.0.1/32"))
+    assert "192.168.0.1/32" in addresses
+    assert "192.168.0.1" in addresses
+
+
 # # # # # # # # # # # # # # #
 # 'add' and 'del' commands  #
 # # # # # # # # # # # # # # #
 
 
-async def test_add_hosts(helpers, query):
+async def test_add_host(helpers, query):
     """ Checks adding and resolving new host """
-    helpers.mock_rule(rule_exists=True)
+    helpers.mock_rule(exists=True)
     helpers.mock_resolve("1.2.3.4")
     await helpers.post("/", host="example.com")
     assert not RouteManager.get_rules.called
@@ -87,13 +99,20 @@ async def test_add_comments(helpers, query):
     assert query(Host).first().comment == "test"
 
 
-async def test_del_hosts(helpers, session, query):
+async def test_del_host(helpers, query):
     """ Check that /rm removes only host and doesn't touch Address """
     helpers.add_host("example.com", "1.2.3.4")
     assert query(Address).first()
     await helpers.post("/rm", host="example.com")
     assert not query(Host).first()
     assert not query(Address).first()
+
+
+# add/remove routes
+
+
+async def test_add_route(helpers):
+    helpers.add_host("1.1.1.0/24")
 
 
 # # # # # # # # # #

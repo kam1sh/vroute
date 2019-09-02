@@ -1,3 +1,6 @@
+import re
+
+
 class WindowIterator:
     """
     Iterator with extras attributes, such as
@@ -39,3 +42,17 @@ class WindowIterator:
     @property
     def has_any(self):
         return bool(self._buf)
+
+
+ipv4_regex = re.compile(r"([\d.]+)(/\d+)?")
+
+
+def with_netmask(address) -> str:
+    if not isinstance(address, str):
+        address = str(address)
+    match = ipv4_regex.match(address)
+    if not match:
+        raise ValueError(address)
+    addr = match.group(1)
+    netmask = match.group(2) or "/32"
+    return addr + netmask

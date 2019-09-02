@@ -1,5 +1,5 @@
 import logging
-import asyncio
+import typing as ty
 
 from aiohttp import web
 
@@ -76,7 +76,7 @@ class Handlers:
         ipr = routing.RouteManager.fromconf(self.app.cfg)
         session = self.session()
         # Fetch all hosts and their IP addresses
-        addresses = await resolve_hosts(session)
+        addresses = await Addresses.fromdb(session)
         json = {}
         with ipr:
             # Check routing rule and add if it doesn't exist
@@ -98,16 +98,12 @@ class Handlers:
     async def purge(self, request):
         """ Removes routes that aren't present in the database. """
         session = self.session()
-        addresses = await resolve_hosts(session)
+        addresses = await Addresses.fromdb(session)
         with routing.RouteManager.fromconf(self.app.cfg) as ipr:
             count = ipr.remove_outdated(keep=addresses)
         with routing.RouterosManager.fromconf(self.app.cfg.get("routeros")) as ros:
             ros_count = ros.remove_outdated(keep=addresses)
         return web.json_response({"removed": count, "removed_ros": ros_count})
-
-
-async def resolve_hosts(session) -> Addresses:
-    return await Addresses.fromdb(session)
 
 
 def get_webapp(app):

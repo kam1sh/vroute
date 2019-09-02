@@ -1,18 +1,26 @@
-import logging
 import asyncio
 from datetime import timedelta, datetime
-import re
+import typing as ty
+import logging
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import orm, Column, Integer, String, DateTime, ForeignKey, Boolean
 import aiodns
 
+from .util import with_netmask
+
 Base = declarative_base()
 log = logging.getLogger(__name__)
 
+class Network:
+    def with_netmask(self):
+        """
+        :return: string in format <network>/<subnet_suffix>
+        """
+        raise NotImplementedError
 
 class Addresses(set):
-    """ list with resolved IPv4/v6 addresses """
+    """ Smart collection for IPv4/v6 addresses/networks. """
 
     def __init__(self):
         super().__init__()
@@ -20,29 +28,17 @@ class Addresses(set):
         # to resolve after 10 minutes
         self.ttl = 300
 
-    def _get_current(self, table: list, clazz=None) -> dict:
+    def _get_current(self, table: list, clazz: ty.Type[Network] = None) -> ty.Tuple[Network]:
         route_class = clazz or Route
-        return {x.without_prefix(): x for x in map(route_class.fromdict, table)}
+        return tuple(map(route_class.fromdict, table))
 
-    def what_to_skip(self, current_table: dict) -> set:
+    def what_to_skip(self, current_table: ty.Collection["Route"]) -> set:
         to_skip = set()
-        for addr in tuple(current_table.keys()):
-            if addr in self:
-                to_skip.add(addr)
+        for route in current_table:
+            address = route.with_netmask()
+            if address in self:
+                to_skip.add(address)
         return to_skip
-
-    def remove_outdated(self, current_table: list, conn, route_class=None):
-        """
-        Removes outdated address both from the table provided and the routing table,
-        """
-        current = self._get_current(current_table, route_class)
-        # remove all that's not in the db
-        for addr in tuple(current.keys()):
-            if addr in self:
-                continue
-            log.info("Removing route %s", addr)
-            current[addr].remove(conn)
-            del current[addr]
 
     @classmethod
     async def fromdb(cls, session):
@@ -51,24 +47,12 @@ class Addresses(set):
         for host in session.query(Host):
             host_addrs = await host.resolve_addresses(session)
             for addr in host_addrs:
-                addresses.add(addr)
+                addresses.add(with_netmask(addr))
         session.commit()
         return addresses
 
-
-class IpMixin:
-    _v4_pattern = re.compile(r"([\d.]+)(/\d+)?")
-
-    def _with_prefix(self, value):
-        if not value.endswith("/32"):
-            return f"{value}/32"
-        return value
-
-    def unprefix(self, addr):
-        match = self._v4_pattern.match(addr)
-        if not match:
-            raise ValueError("Failed to parse address %s" % addr)
-        return match.group(1)
+    def __contains__(self, item):
+        return super().__contains__(with_netmask(item))
 
 
 class Host(Base):
@@ -128,7 +112,7 @@ class Host(Base):
         return f"<Host({self.name!r})>"
 
 
-class Address(Base, IpMixin):
+class Address(Base, Network):
     __tablename__ = "addresses"
     id = Column(Integer, primary_key=True)
     v6 = Column(Boolean, default=False)
@@ -137,27 +121,24 @@ class Address(Base, IpMixin):
     )
     value = Column(String)
 
-    def with_prefix(self):
-        return self._with_prefix(self.value)
+    def with_netmask(self):
+        return with_netmask(self.value)
 
     def __str__(self):
         """ Returns address without prefix. """
         if self.v6:
             raise NotImplementedError()
-        return self.with_prefix()
+        return self.with_netmask()
 
     def __eq__(self, value):
         # both have prefix or both doesn't
         if self.value == value:
             return True
-        if self.with_prefix().endswith("/32") and self.unprefix(self.value) == value:
+        if self.with_netmask() == value:
             return True
-        if self.with_prefix() == value:
+        if self.with_netmask() == with_netmask(value):
             return True
-        try:
-            value = value.with_prefix()
-        except:
-            return False
+        return False
 
     def __hash__(self):
         return hash(self.value)
@@ -181,10 +162,10 @@ class Rule:
         return f"<Rule({self.table!r})>"
 
 
-class Route(IpMixin):
-    __slots__ = ("dst", "via", "table")
+class Route(Network):
+    __slots__ = ("dst", "via", "table", "netmask")
 
-    def __init__(self, dst: str, via: int, table: int, netmask=32):
+    def __init__(self, dst: str, via: int, table: int, netmask: ty.Optional[int]=32):
         self.dst = dst
         self.via = via
         self.table = table
@@ -198,20 +179,15 @@ class Route(IpMixin):
         via = attrs["RTA_OIF"]
         return cls(dst=attrs["RTA_DST"], via=via, table=raw["table"], netmask=netmask)
 
-    def with_prefix(self):
-        if not self.dst.endswith("/32"):
-            return f"{self.dst}/{self.netmask}"
-        return self.dst
-
-    def without_prefix(self):
-        return self.unprefix(self.dst)
+    def with_netmask(self):
+        return f"{self.dst}/{self.netmask}"
 
 
 class RosRoute(Route):
     __slots__ = ("dst", "via", "table", "id")
 
     def __init__(self, dst, via, table, id_=None):
-        super().__init__(dst, via, table)
+        super().__init__(dst, via, table, netmask=None)
         self.id = id_
 
     @classmethod
@@ -222,6 +198,9 @@ class RosRoute(Route):
             table=raw["routing-mark"],
             id_=raw["id"],
         )
+
+    def with_netmask(self):
+        return with_netmask(self.dst)
 
 class Interface:
     def __init__(self, raw):

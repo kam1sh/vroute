@@ -12,4 +12,6 @@ steps:
   commands:
   - apk add git
   - pip3 install poetry
+  - poetry install
+  - poetry run pytest
   - poetry build

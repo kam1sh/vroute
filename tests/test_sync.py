@@ -1,5 +1,6 @@
 from vroute.routing import RouteManager, RouterosManager
 
+
 async def test_sync_initial(helpers):
     helpers.add_host("example.com", "1.2.3.4")
     helpers.mock_rule(exists=False)
@@ -19,6 +20,7 @@ async def test_sync_initial(helpers):
         {"dst-address": "1.2.3.4/32", "gateway": "127.0.0.2", "routing-mark": "vpn"}
     )
 
+
 async def test_sync_append(helpers):
     helpers.add_host("example.com", "1.2.3.4")
     helpers.add_host("example.org", "1.2.3.5")
@@ -33,6 +35,7 @@ async def test_sync_append(helpers):
         {"dst-address": "1.2.3.5/32", "gateway": "127.0.0.2", "routing-mark": "vpn"}
     )
 
+
 async def test_sync_none(helpers):
     helpers.add_host("example.com", "1.2.3.4")
     helpers.mock_rule(exists=True)
@@ -43,6 +46,7 @@ async def test_sync_none(helpers):
     assert not RouteManager.route.called
     assert not RouterosManager._add_route.called
 
+
 async def test_purge(helpers):
     # helpers.add_host("example.com", "1.2.3.4")
     helpers.mock_rule()
@@ -50,5 +54,5 @@ async def test_purge(helpers):
     helpers.mock_routes("1.2.3.4")
     helpers.mock_ros_routes("1.2.3.4")
     await helpers.post("/purge")
-    RouteManager.route.assert_called_once_with("del", dst='1.2.3.4/32', oif=7, table=10)
+    RouteManager.route.assert_called_once_with("del", dst="1.2.3.4/32", oif=7, table=10)
     RouterosManager._rm_route.assert_called_once_with("*1")

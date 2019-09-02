@@ -1,10 +1,11 @@
 import logging
 import typing as ty
 
-from .models import Addresses, Rule, Host, Route, RosRoute, Interface
 import pyroute2
 import routeros_api
 
+from .models import Addresses, Rule, Host, Route, RosRoute, Interface
+from .util import with_netmask
 
 log = logging.getLogger(__name__)
 
@@ -14,12 +15,13 @@ class RouteManager(pyroute2.IPRoute):
 
     def __init__(self, interface: str, table: int, priority: int):
         super().__init__()
-        self.interface = find_interface(self, interface)
+        self._interface = interface
+        self.interface = self.find_interface(interface)
         self.table = table
         self.priority = priority
-        self.current = self.show_routes()
+        self.current: ty.List[Route] = list(self.show_routes())
 
-    def show_rules(self) -> ty.Iterable["Rule"]:
+    def show_rules(self) -> ty.Iterable[Rule]:
         return map(Rule.fromdict, self.get_rules())
 
     def check_rule(self, priority: int = None):
@@ -33,19 +35,17 @@ class RouteManager(pyroute2.IPRoute):
         except RuleExistsError as e:
             log.info(e)
 
-    def show_routes(
-        self, **kwargs
-    ) -> ty.Dict[str, Route]:
+    def show_routes(self, **kwargs) -> ty.Collection[Route]:
         """ Returns dictionary of addresses without prefix in VPN (or other) table. """
         out = self.get_routes(table=self.table, **kwargs)
-        return {x.without_prefix(): x for x in map(Route.fromdict, out)}
+        return tuple(map(Route.fromdict, out))
 
-    def add(self, addr: Route):
-        addr = addr.with_prefix()
+    def add(self, addr: str):
+        addr = with_netmask(addr)
         self.route("add", dst=addr, oif=self.interface.num, table=self.table)
 
     def add_all(
-        self, addrs: ty.Iterable[Route], to_skip: ty.Collection[Route]
+        self, addrs: ty.Iterable[str], to_skip: ty.Collection[Route]
     ) -> ty.Tuple[int, int]:
         """ Adds all routes that are not in the skip list, returns counters of how many added and skipped. """
         added, skipped = 0, 0
@@ -61,12 +61,23 @@ class RouteManager(pyroute2.IPRoute):
         current = self.show_routes()
         removed = 0
         for route in current:
+            route = route.with_netmask()
             if route in keep:
                 print(f"Skipping route {route}")
                 continue
-            self.route("del", dst=f"{route}/32", oif=self.interface.num, table=self.table)
+            self.route(
+                "del", dst=route, oif=self.interface.num, table=self.table
+            )
             removed += 1
         return removed
+
+    def find_interface(self, name):
+        interfaces = [x for x in map(Interface, self.get_links()) if x.name == name]
+        if not interfaces:
+            raise ValueError(f"Failed to find interface with name {name!r}.")
+        # elif len(interfaces) > 1:
+        #     raise ValueError("It can't be!")
+        return interfaces[0]
 
     @classmethod
     def fromconf(cls, cfg: dict):
@@ -94,9 +105,9 @@ class RouterosManager(routeros_api.RouterOsApiPool):
     def get_raw_routes(self):
         return self._route.get(**{"routing-mark": self.table})
 
-    def get_routes(self) -> ty.Dict[str, RosRoute]:
+    def get_routes(self) -> ty.Collection[RosRoute]:
         resp = self.get_raw_routes()
-        return {x.without_prefix(): x for x in map(RosRoute.fromdict, resp)}
+        return tuple(map(RosRoute.fromdict, resp))
 
     def _add_route(self, params: dict):
         return self._route.add(**params)
@@ -109,7 +120,7 @@ class RouterosManager(routeros_api.RouterOsApiPool):
             if addr in to_skip:
                 continue
             params = {
-                "dst-address": addr.with_prefix(),
+                "dst-address": with_netmask(addr),
                 "gateway": self.vpn_host,
                 "routing-mark": self.table,
             }
@@ -120,7 +131,8 @@ class RouterosManager(routeros_api.RouterOsApiPool):
     def remove_outdated(self, keep: ty.Collection[str]) -> int:
         current = self.get_routes()
         removed = 0
-        for rstr, route in current.items():
+        for route in current:
+            rstr = route.with_netmask()
             if rstr in keep:
                 continue
             self._rm_route(route.id)
@@ -159,15 +171,6 @@ def add_rule(table_id, priority, iproute):
             raise DifferentRuleExists(targets[0])
     else:
         raise MultipleRulesExists(targets)
-
-
-def find_interface(ipr, name):
-    interfaces = [x for x in map(Interface, ipr.get_links()) if x.name == name]
-    if not interfaces:
-        raise ValueError(f"Failed to find interface with name {name!r}.")
-    # elif len(interfaces) > 1:
-    #     raise ValueError("It can't be!")
-    return interfaces[0]
 
 
 # # # # # # # # # #
