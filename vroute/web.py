@@ -1,10 +1,11 @@
+import asyncio
 import logging
 
 from aiohttp import web
 
 from .db import Host, Address
 from .util import WindowIterator
-from . import routing, VRoute
+from . import VRoute
 from .models import Addresses
 
 log = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ log = logging.getLogger(__name__)
 class Handlers:
     def __init__(self, app: VRoute):
         self.app = app
+        self.lock = asyncio.Lock()
 
     def session(self):
         return self.app.new_session()
@@ -71,6 +73,10 @@ class Handlers:
         return web.json_response(output)
 
     async def sync(self, request):
+        async with self.lock:
+            return await self._sync(request)
+
+    async def _sync(self, request):
         """ Synchronizes routing tables with database. """
         session = self.session()
         # Fetch all hosts and their IP addresses
@@ -96,6 +102,10 @@ class Handlers:
         return web.json_response(json)
 
     async def purge(self, request):
+        async with self.lock:
+            return await self._purge(request)
+
+    async def _purge(self, request):
         """ Removes routes that aren't present in the database. """
         session = self.session()
         addresses = await Addresses.fromdb(session)
@@ -105,10 +115,29 @@ class Handlers:
         ros_count = self.app.ros.remove_outdated(keep=addresses)
         return web.json_response({"removed": count, "removed_ros": ros_count})
 
+    async def startup_tasks(self, app):
+        app["sync"] = app.loop.create_task(self.background_sync())
 
-def get_webapp(app):
+    async def shutdown_tasks(self, app):
+        app["sync"].cancel()
+        await app["sync"]
+
+    async def background_sync(self):
+        try:
+            while 1:
+                log.info("Executing background sync...")
+                await self.sync(None)
+                await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            pass
+
+
+def get_webapp(app, coroutines=False):
     handlers = Handlers(app)
     app = web.Application()
+    if coroutines:
+        app.on_startup.append(handlers.startup_tasks)
+        app.on_cleanup.append(handlers.shutdown_tasks)
     router = app.router
     router.add_post("/", handlers.add)
     router.add_get("/", handlers.show)

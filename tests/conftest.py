@@ -70,13 +70,6 @@ def helpers(mocker, vrouteobj, session, loop, aiohttp_client):
         requests=loop.run_until_complete(aiohttp_client(webapp)),
     )
 
-
-@pytest.fixture
-def cli(loop, aiohttp_client):
-    app = web.get_webapp(loop)
-    return loop.run_until_complete(aiohttp_client(app))
-
-
 @pytest.fixture
 def query(session):
     return session.query

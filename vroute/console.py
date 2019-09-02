@@ -2,7 +2,6 @@
 import logging
 
 import click
-from cleo import formatters, Application as BaseApplication
 
 from . import VRoute, __version__
 from .web import get_webapp
@@ -96,6 +95,7 @@ def purge(app):
 
 @cli.command()
 @click.option("-v", "--verbose", count=True)
+@click.option("--nocoro", flag=True, help="Disable coroutines")
 @pass_app
 def serve(app, verbose):
     level = levels[min(verbose, 2)]
@@ -103,7 +103,7 @@ def serve(app, verbose):
     log.setLevel(level)
     logging.basicConfig(level=level)
     app.load_db()
-    webapp = get_webapp(app)
+    webapp = get_webapp(app, coroutines=True)
     app.serve(webapp=webapp)
 
 

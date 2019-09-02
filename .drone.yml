@@ -1,3 +1,7 @@
+# I use drone as a CI server at home,
+# but I move builds to azure or something
+# if this project become popular
+
 ---
 kind: pipeline
 type: docker
@@ -10,8 +14,8 @@ steps:
 - name: build
   image: python:3.6-alpine
   commands:
-  - apk add git
-  - pip3 install poetry
-  - poetry install
-  - poetry run pytest
-  - poetry build
+    - apk add git
+    - pip3 install poetry
+    - poetry install
+    - poetry run pytest
+    - poetry build
