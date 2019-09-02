@@ -62,6 +62,7 @@ class RouteManager(pyroute2.IPRoute):
         removed = 0
         for route in current:
             if route in keep:
+                print(f"Skipping route {route}")
                 continue
             self.route("del", dst=f"{route}/32", oif=self.interface.num, table=self.table)
             removed += 1

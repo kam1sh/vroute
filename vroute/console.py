@@ -84,11 +84,14 @@ def sync(app):
 
 
 @cli.command()
-@click.confirmation_option(prompt="Are you sure you want to remove database")
+@click.confirmation_option(prompt="Do you want to remove outdated routes?")
 @pass_app
 def purge(app):
-    response = app.request("post", "/sync")
-    click.echo(response.json()["message"])
+    response = app.request("post", "/purge")
+    json = response.json()
+    print(json)
+    click.echo(f"Removed {json['removed']} routes.")
+    click.echo(f"Removed {json['removed_ros']} routes in RouterOS.")
 
 
 @cli.command()
