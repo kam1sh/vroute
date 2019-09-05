@@ -5,7 +5,7 @@ import pyroute2
 import routeros_api
 import routeros_api.resource
 
-from .models import Addresses, Rule, Host, Route, RosRoute, Interface
+from .models import Rule, Route, RosRoute, Interface
 from .util import with_netmask
 
 log = logging.getLogger(__name__)
@@ -172,7 +172,7 @@ def add_rule(table_id, priority, iproute):
     targets = [rule for rule in iproute.show_rules() if rule.table == table_id]
     if not targets:
         # create new rule if there is no any
-        iproute.rule(action="add", table=table_id, priority=priority)
+        iproute.rule("add", table=table_id, priority=priority)
     elif len(targets) == 1:
         if targets[0].priority == priority:
             raise RuleExistsError(targets[0])

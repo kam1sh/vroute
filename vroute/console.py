@@ -95,15 +95,15 @@ def purge(app):
 
 @cli.command()
 @click.option("-v", "--verbose", count=True)
-@click.option("--nocoro", flag=True, help="Disable coroutines")
+@click.option("--nocoro", is_flag=True, help="Disable coroutines")
 @pass_app
-def serve(app, verbose):
+def serve(app, verbose, nocoro):
     level = levels[min(verbose, 2)]
     log = logging.getLogger("vroute")
     log.setLevel(level)
     logging.basicConfig(level=level)
     app.load_db()
-    webapp = get_webapp(app, coroutines=True)
+    webapp = get_webapp(app, coroutines=not nocoro)
     app.serve(webapp=webapp)
 
 

@@ -6,7 +6,7 @@ import requests
 
 from .routing import RouterosManager, RouteManager
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 log = logging.getLogger(__name__)
 
