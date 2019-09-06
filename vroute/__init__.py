@@ -6,7 +6,7 @@ import requests
 
 from .routing import RouterosManager, RouteManager
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 log = logging.getLogger(__name__)
 
@@ -75,16 +75,8 @@ class VRoute:
 
     def __enter__(self):
         self.connect()
-        lock = self.cfg.lock_file
-        log.debug("Obtaining lock file <comment>%s</>", lock)
-        if lock.exists():
-            raise EnvironmentError(f"Lock file {lock} exists.")
-        self.lock = lock.open("w")
         return self
 
     def __exit__(self, exc_type, value, tb):
-        log.debug("Releasing lock file")
-        self.lock.close()
-        self.cfg.lock_file.unlink()
         self.disconnect()
 
