@@ -11,7 +11,7 @@ async def test_sync_initial(helpers):
     await helpers.post("/sync")
     mgr = RouteManager
     mgr.get_rules.assert_called_once_with()
-    mgr.rule.assert_called_once_with(action="add", priority=40, table=10)
+    mgr.rule.assert_called_once_with("add", priority=40, table=10)
     mgr.get_routes.assert_called_once_with(table=10)
     mgr.route.assert_called_once_with("add", dst="1.2.3.4/32", oif=7, table=10)
     mgr = RouterosManager

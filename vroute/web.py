@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from aiohttp import web
+import aiodns.error
 
 from .db import Host, Address
 from .util import WindowIterator
@@ -123,13 +124,15 @@ class Handlers:
         await app["sync"]
 
     async def background_sync(self):
-        try:
-            while 1:
+        while 1:
+            try:
                 log.info("Executing background sync...")
                 await self.sync(None)
-                await asyncio.sleep(30)
-        except asyncio.CancelledError:
-            pass
+            except asyncio.CancelledError:
+                return
+            except:
+                log.exception("Background sync error:")
+            await asyncio.sleep(30)
 
 
 def get_webapp(app, coroutines=False):
