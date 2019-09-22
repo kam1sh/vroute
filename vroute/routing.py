@@ -22,6 +22,19 @@ class RouteManager(pyroute2.IPRoute):
         self.interface: ty.Optional[Interface] = None
         self.current: ty.Optional[ty.List[Route]] = None
 
+    @classmethod
+    def fromconf(cls, cfg: dict):
+        priority = cfg.get("vpn.rule.priority")
+        if priority is None:
+            raise ValueError("Please specify rule priority in the configuration file.")
+        table = cfg.get("vpn.table_id")
+        if table is None:
+            raise ValueError("Please specify table ID in the configuration file.")
+        interface = cfg.get("vpn.route_to.interface")
+        if not interface:
+            raise ValueError("Please specify interface in the configuration file.")
+        return cls(interface=interface, table=table, priority=priority)
+
     def update(self):
         self.interface = self.find_interface(self._interface)
         self.current = list(self.show_routes())
@@ -81,19 +94,6 @@ class RouteManager(pyroute2.IPRoute):
         # elif len(interfaces) > 1:
         #     raise ValueError("It can't be!")
         return interfaces[0]
-
-    @classmethod
-    def fromconf(cls, cfg: dict):
-        priority = cfg.get("vpn.rule.priority")
-        if priority is None:
-            raise ValueError("Please specify rule priority in the configuration file.")
-        table = cfg.get("vpn.table_id")
-        if table is None:
-            raise ValueError("Please specify table ID in the configuration file.")
-        interface = cfg.get("vpn.route_to.interface")
-        if not interface:
-            raise ValueError("Please specify interface in the configuration file.")
-        return cls(interface=interface, table=table, priority=priority)
 
 
 class RouterosManager(routeros_api.RouterOsApiPool):

@@ -110,7 +110,7 @@ class Handlers:
         """ Synchronizes routing tables with database. """
         session = self.session()
         # Fetch all hosts and their IP addresses
-        addresses = await Addresses.fromdb(session)
+        addresses = await Addresses.fromdb(session, ignorelist=self.app.cfg.get("exclude"))
         json = {}
         ipr = self.app.netlink
         # update routing information

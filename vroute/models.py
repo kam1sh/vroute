@@ -24,15 +24,27 @@ class Network:
 class Addresses(set):
     """ Smart collection for IPv4/v6 addresses/networks. """
 
-    def __init__(self):
+    def __init__(self, ignorelist=None):
         super().__init__()
         # by default host.aresolve() will retry
         # to resolve after 10 minutes
         self.ttl = 300
+        self.ignore = ignorelist or []
 
-    def _get_current(
-        self, table: list, clazz: ty.Type[Network] = None
-    ) -> ty.Tuple[Network]:
+    @classmethod
+    async def fromdb(cls, session, ignorelist=None):
+        """ Returns all addresses from database. """
+        addresses = cls(ignorelist=ignorelist)
+        for host in session.query(Host):
+            host_addrs = await host.resolve_addresses(session)
+            for addr in host_addrs:
+                addresses.add(with_netmask(addr))
+        session.commit()
+        for addr in session.query(Address).filter(Address.host_id.is_(None)):
+            addresses.add(addr)
+        return addresses
+
+    def _get_current(self, table: list, clazz: ty.Type[Network] = None):
         route_class = clazz or Route
         return tuple(map(route_class.fromdict, table))
 
@@ -42,20 +54,8 @@ class Addresses(set):
             address = route.with_netmask()
             if address in self:
                 to_skip.add(address)
+        to_skip.update(self.ignore)
         return to_skip
-
-    @classmethod
-    async def fromdb(cls, session):
-        """ Returns all addresses from database. """
-        addresses = cls()
-        for host in session.query(Host):
-            host_addrs = await host.resolve_addresses(session)
-            for addr in host_addrs:
-                addresses.add(with_netmask(addr))
-        session.commit()
-        for addr in session.query(Address).filter(Address.host_id.is_(None)):
-            addresses.add(addr)
-        return addresses
 
     def __contains__(self, item):
         return super().__contains__(with_netmask(item))
