@@ -19,10 +19,9 @@ CONFIG = dict(
     vpn=dict(table_id=10, rule={"priority": 40}, route_to={"interface": "tun0"}),
     routeros=dict(
         addr="127.0.0.1",
-        vpn_addr="127.0.0.2",
-        table="vpn",
         username="admin",
         password="",
+        list_name="vpn"
     ),
 )
 
@@ -69,6 +68,7 @@ def helpers(mocker, vrouteobj, session, loop, aiohttp_client):
         session=session,
         requests=loop.run_until_complete(aiohttp_client(webapp)),
     )
+
 
 @pytest.fixture
 def query(session):

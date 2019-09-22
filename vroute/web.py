@@ -1,8 +1,10 @@
 import asyncio
+import itertools
 import logging
 
 from aiohttp import web
 import aiodns.error
+from sqlalchemy.orm.exc import NoResultFound
 
 from .db import Host, Address
 from .util import WindowIterator
@@ -10,6 +12,11 @@ from . import VRoute
 from .models import Addresses
 
 log = logging.getLogger(__name__)
+
+
+def chunked(iterable, size):
+    args = [iter(iterable)] * size
+    return itertools.zip_longest(*args, fillvalue=None)
 
 
 class Handlers:
@@ -20,7 +27,7 @@ class Handlers:
     def session(self):
         return self.app.new_session()
 
-    async def add(self, request):
+    async def add_host(self, request):
         """
         Adds new Host record and resolved addresses.
         If host already exists, renews addresses.
@@ -30,9 +37,11 @@ class Handlers:
         json = await request.json()
         host = json["host"]
         session = self.session()
-        record = session.query(Host).filter(Host.name == host).first()
-        already_exists = bool(record)
-        if not already_exists:
+        already_exists = True
+        try:
+            record = session.query(Host).filter(Host.name == host).one()
+        except NoResultFound:
+            already_exists = False
             record = Host(name=host, comment=json.get("comment"))
             session.add(record)
             session.commit()
@@ -43,12 +52,32 @@ class Handlers:
             {"exists": already_exists, "addrs": [x.value for x in addrs]}
         )
 
+    async def add_routes(self, request):
+        if not request.has_body:
+            return web.json_response({"error": "Provide body"}, status=400)
+        json = await request.json()
+        routes = json["routes"]
+        session = self.session()
+        exists = set()
+        for chunk in chunked(routes, 100):
+            addrs = session.query(Address.value)\
+                .filter(Address.value.in_(chunk))\
+                .filter(Address.host_id.is_(None))
+            exists.update(addrs)
+
+        response = {"exists": len(exists), "count": len(routes) - len(exists)}
+        for item in filter(lambda x: x not in exists, routes):
+            addr = Address(value=item)
+            session.add(addr)
+        session.commit()
+        return web.json_response(response)
+
     async def remove(self, request):
         """ Removes host from the database. """
         json = await request.json()
         host = json["host"]
         session = self.session()
-        host = session.query(Host).filter(Host.name == host).first()
+        host = session.query(Host).filter(Host.name == host).one()
         if host is None:
             return web.json_response({"error": "Host not found."}, status=404)
         log.info("Removing host %s", host.id)
@@ -142,7 +171,8 @@ def get_webapp(app, coroutines=False):
         app.on_startup.append(handlers.startup_tasks)
         app.on_cleanup.append(handlers.shutdown_tasks)
     router = app.router
-    router.add_post("/", handlers.add)
+    router.add_post("/", handlers.add_host)
+    router.add_post("/routes", handlers.add_routes)
     router.add_get("/", handlers.show)
     router.add_post("/rm", handlers.remove)
     router.add_post("/sync", handlers.sync)

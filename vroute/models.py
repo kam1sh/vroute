@@ -12,12 +12,14 @@ from .util import with_netmask
 Base = declarative_base()
 log = logging.getLogger(__name__)
 
+
 class Network:
     def with_netmask(self):
         """
         :return: string in format <network>/<subnet_suffix>
         """
         raise NotImplementedError
+
 
 class Addresses(set):
     """ Smart collection for IPv4/v6 addresses/networks. """
@@ -28,7 +30,9 @@ class Addresses(set):
         # to resolve after 10 minutes
         self.ttl = 300
 
-    def _get_current(self, table: list, clazz: ty.Type[Network] = None) -> ty.Tuple[Network]:
+    def _get_current(
+        self, table: list, clazz: ty.Type[Network] = None
+    ) -> ty.Tuple[Network]:
         route_class = clazz or Route
         return tuple(map(route_class.fromdict, table))
 
@@ -49,6 +53,8 @@ class Addresses(set):
             for addr in host_addrs:
                 addresses.add(with_netmask(addr))
         session.commit()
+        for addr in session.query(Address).filter(Address.host_id.is_(None)):
+            addresses.add(addr)
         return addresses
 
     def __contains__(self, item):
@@ -115,11 +121,9 @@ class Host(Base):
 class Address(Base, Network):
     __tablename__ = "addresses"
     id = Column(Integer, primary_key=True)
+    value = Column(String, index=True)
     v6 = Column(Boolean, default=False)
-    host_id = Column(
-        Integer, ForeignKey(Host.id, ondelete="CASCADE"), nullable=False, index=True
-    )
-    value = Column(String)
+    host_id = Column(Integer, ForeignKey(Host.id, ondelete="CASCADE"), index=True)
 
     def with_netmask(self):
         return with_netmask(self.value)
@@ -165,7 +169,7 @@ class Rule:
 class Route(Network):
     __slots__ = ("dst", "via", "table", "netmask")
 
-    def __init__(self, dst: str, via: int, table: int, netmask: ty.Optional[int]=32):
+    def __init__(self, dst: str, via: int, table: int, netmask: ty.Optional[int] = 32):
         self.dst = dst
         self.via = via
         self.table = table
@@ -193,14 +197,15 @@ class RosRoute(Route):
     @classmethod
     def fromdict(cls, raw: dict):
         return cls(
-            dst=raw["dst-address"],
-            via=raw["gateway"],
-            table=raw["routing-mark"],
+            dst=raw["address"],
+            via=None,
+            table=None,
             id_=raw["id"],
         )
 
     def with_netmask(self):
         return with_netmask(self.dst)
+
 
 class Interface:
     def __init__(self, raw):

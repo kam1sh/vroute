@@ -1,4 +1,5 @@
 from vroute.routing import RouteManager, RouterosManager
+from vroute.models import Address
 
 
 async def test_sync_initial(helpers):
@@ -17,7 +18,7 @@ async def test_sync_initial(helpers):
     mgr = RouterosManager
     mgr.get_raw_routes.assert_called_once_with()
     mgr._add_route.assert_called_once_with(
-        {"dst-address": "1.2.3.4/32", "gateway": "127.0.0.2", "routing-mark": "vpn"}
+        {"address": "1.2.3.4/32", "list": "vpn"}
     )
 
 
@@ -32,7 +33,7 @@ async def test_sync_append(helpers):
     assert not RouteManager.rule.called
     RouteManager.route.assert_called_once_with("add", dst="1.2.3.5/32", oif=7, table=10)
     RouterosManager._add_route.assert_called_once_with(
-        {"dst-address": "1.2.3.5/32", "gateway": "127.0.0.2", "routing-mark": "vpn"}
+        {"address": "1.2.3.5/32", "list": "vpn"}
     )
 
 
@@ -45,6 +46,20 @@ async def test_sync_none(helpers):
     await helpers.post("/sync")
     assert not RouteManager.route.called
     assert not RouterosManager._add_route.called
+
+
+async def test_sync_address(helpers, session):
+    helpers.mock_rule()
+    helpers.mock_interface()
+    helpers.mock_routes()
+    helpers.mock_ros_routes()
+    session.add(Address(value="46.101.128.0/17"))
+    session.commit()
+    await helpers.post("/sync")
+    RouteManager.route.assert_called_once_with("add", dst="46.101.128.0/17", oif=7, table=10)
+    RouterosManager._add_route.assert_called_once_with(
+        {"address": "46.101.128.0/17", "list": "vpn"}
+    )
 
 
 async def test_purge(helpers):

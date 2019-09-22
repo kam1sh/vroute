@@ -92,6 +92,12 @@ async def test_add_host(helpers, query):
     assert query(Address).first()
 
 
+async def test_add_route(helpers, query):
+    resp = await helpers.post("/routes", routes=["46.101.128.0/17"])
+    json = await resp.json()
+    assert json == {"count": 1, "exists": 0}
+    assert query(Address).one() == Address(value="46.101.128.0/17")
+
 @pytest.mark.skip("not implemented")
 async def test_add_comments(helpers, query):
     helpers.mock_resolve("1.2.3.4")
@@ -106,13 +112,6 @@ async def test_del_host(helpers, query):
     await helpers.post("/rm", host="example.com")
     assert not query(Host).first()
     assert not query(Address).first()
-
-
-# add/remove routes
-
-
-async def test_add_route(helpers):
-    helpers.add_host("1.1.1.0/24")
 
 
 # # # # # # # # # #

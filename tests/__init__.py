@@ -76,14 +76,13 @@ class Helpers:
             routes.append(route)
         RouteManager.get_routes.return_value = routes
 
-    def mock_ros_routes(self, *addresses, table="vpn", via="127.0.0.2"):
+    def mock_ros_routes(self, *addresses, list_name="vpn"):
         mock_ros(self.mocker.patch)
         routes = []
         for i, address in enumerate(addresses, start=1):
             route = deepcopy(samples.ROS_ROUTE)
-            route["dst-address"] = address + "/32"
-            route["gateway"] = via
-            route["routing-mark"] = table
+            route["address"] = address + "/32"
+            route["list"] = list_name
             route["id"] = f"*{i}"
             routes.append(route)
         RouterosManager.get_raw_routes.return_value = routes
@@ -98,8 +97,10 @@ class Helpers:
         runner = click.testing.CliRunner()
         return runner.invoke(console.cli, args)
 
+
 def mock_network(patch):
     mock_ros(patch)
+
 
 def mock_netlink(patch):
     patch.object(RouteManager, "get_routes")

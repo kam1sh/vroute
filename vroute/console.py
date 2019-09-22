@@ -1,5 +1,6 @@
 """Click stuff"""
 import logging
+import time
 
 import click
 
@@ -25,11 +26,16 @@ def cli(ctx):
     ctx.obj = get_vroute()
 
 
-@cli.command()
-@click.argument("host")
+@cli.group()
+def add():
+    pass
+
+
+@add.command("host")
+@click.argument("name")
 @pass_app
-def add(app, host):
-    json = app.request("post", "/", json={"host": host}).json()
+def add_host(app, name):
+    json = app.request("post", "/", json={"host": name}).json()
     if not json["addrs"]:
         click.echo("No addresses resolved.")
     else:
@@ -40,12 +46,25 @@ def add(app, host):
             click.echo("  - " + addr)
 
 
+@add.command("routes")
+@click.argument("file", type=click.File("r"))
+@pass_app
+def add_routes(app, file):
+    json = app.request(
+        "post", "/routes", json={"routes": [x.rstrip() for x in file]}
+    ).json()
+    click.echo(f"Added {json['count']} routes in database.")
+    click.echo(f"{json['exists']} routes skipped.")
+
+cli.add_command(add)
+
 @cli.command()
 @pass_app
 def show(app):
     response = app.request("get", "/")
     if response.status_code == 204:
         click.echo("No hosts added yet.")
+        return
     json = response.json()
     for host, data in json.items():
         comment = data.get("comment")
@@ -75,9 +94,11 @@ def remove(app, host):
 @cli.command()
 @pass_app
 def sync(app):
+    start = time.time()
     json = app.request("post", "/sync").json()
+    elapsed = time.time() - start
     added, skipped = json["added"], json["skipped"]
-    click.echo(f"Added {added} routes, skipped {skipped}")
+    click.echo(f"Added {added} routes, skipped {skipped} in {elapsed:.2f} seconds")
     if "full" in json:
         click.echo("RouterOS synced successfully.")
 

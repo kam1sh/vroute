@@ -70,9 +70,7 @@ class RouteManager(pyroute2.IPRoute):
             if route in keep:
                 print(f"Skipping route {route}")
                 continue
-            self.route(
-                "del", dst=route, oif=self.interface.num, table=self.table
-            )
+            self.route("del", dst=route, oif=self.interface.num, table=self.table)
             removed += 1
         return removed
 
@@ -99,39 +97,48 @@ class RouteManager(pyroute2.IPRoute):
 
 
 class RouterosManager(routeros_api.RouterOsApiPool):
-    def __init__(self, addr, username, password, table, vpn_host, **kwargs):
+    def __init__(self, addr, username, password, name, **kwargs):
         super().__init__(addr, username, password, **kwargs)
-        self.table = table
-        self.vpn_host = vpn_host
+        self.list_name = name
         self.api: ty.Optional[routeros_api.api.RouterOsApi] = None
-        self._route: ty.Optional[routeros_api.resource.RouterOsResource] = None
+        self._list: ty.Optional[routeros_api.resource.RouterOsResource] = None
+
+    @classmethod
+    def fromconf(cls, cfg: dict):
+        if cfg is None:
+            raise ValueError("Specify RouterOS connection and routing settings.")
+        return cls(
+            cfg["addr"],
+            username=cfg["username"],
+            password=cfg["password"],
+            name=cfg["list_name"],
+        )
 
     def update(self):
         self.api = self.get_api()
-        self._route = self.api.get_resource("/ip/route")
+        self._list = self.api.get_resource("/ip/firewall/address-list")
 
     # moved in method for mocking
     def get_raw_routes(self):
-        return self._route.get(**{"routing-mark": self.table})
+        return self._list.get(**{"list": self.list_name})
 
     def get_routes(self) -> ty.Collection[RosRoute]:
         resp = self.get_raw_routes()
         return tuple(map(RosRoute.fromdict, resp))
 
     def _add_route(self, params: dict):
-        return self._route.add(**params)
+        return self._list.add(**params)
 
     def _rm_route(self, id_):
-        return self._route.remove(id=id_)
+        return self._list.remove(id=id_)
 
     def add_routes(self, addresses: ty.Iterable, to_skip: ty.Collection):
         for addr in addresses:
             if addr in to_skip:
                 continue
             params = {
-                "dst-address": with_netmask(addr),
-                "gateway": self.vpn_host,
-                "routing-mark": self.table,
+                "address": with_netmask(addr),
+                "list": self.list_name,
             }
             log.debug("Create route arguments: %s", params)
             resp = self._add_route(params)
@@ -153,18 +160,6 @@ class RouterosManager(routeros_api.RouterOsApiPool):
 
     def __exit__(self, exc_type, value, tb):
         self.disconnect()
-
-    @classmethod
-    def fromconf(cls, cfg: dict):
-        if cfg is None:
-            raise ValueError("Specify RouterOS connection and routing settings.")
-        return cls(
-            cfg["addr"],
-            username=cfg["username"],
-            password=cfg["password"],
-            table=cfg["table"],
-            vpn_host=cfg["vpn_addr"],
-        )
 
 
 def add_rule(table_id, priority, iproute):
