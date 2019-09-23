@@ -4,7 +4,6 @@ from datetime import timedelta, datetime
 from json import dumps as jsondump
 
 import click.testing
-from vroute import console, routing
 from vroute.routing import RouteManager, RouterosManager
 from vroute.models import Host, Address
 
@@ -56,11 +55,7 @@ class Helpers:
         self.mocker.patch.object(RouteManager, "rule")
 
     def mock_interface(self, name="tun0", number=7):
-        self.mocker.patch.object(RouteManager, "get_links")
-        iface = deepcopy(samples.INTERFACE)
-        iface["attrs"] = [("IFLA_IFNAME", name)]
-        iface["index"] = number
-        RouteManager.get_links.return_value = (iface,)
+        mock_interface(self.mocker.patch, name=name, number=number)
 
     def mock_routes(self, *addresses, table=10, oif_num=7, netmask=32):
         mock_netlink(self.mocker.patch)
@@ -102,6 +97,13 @@ def mock_network(patch):
     mock_ros(patch)
 
 
+def mock_interface(patch, name="tun0", number=7):
+    patch.object(RouteManager, "get_links")
+    iface = deepcopy(samples.INTERFACE)
+    iface["attrs"] = [("IFLA_IFNAME", name)]
+    iface["index"] = number
+    RouteManager.get_links.return_value = (iface,)
+
 def mock_netlink(patch):
     patch.object(RouteManager, "get_routes")
     patch.object(RouteManager, "route")
@@ -110,5 +112,5 @@ def mock_netlink(patch):
 def mock_ros(patch):
     patch.object(RouterosManager, "get_api")
     patch.object(RouterosManager, "get_raw_routes")
-    patch.object(RouterosManager, "_add_route")
+    patch.object(RouterosManager, "_add_network")
     patch.object(RouterosManager, "_rm_route")

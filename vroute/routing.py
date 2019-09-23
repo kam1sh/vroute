@@ -1,26 +1,62 @@
+from abc import ABC, abstractmethod, abstractclassmethod
 import logging
+from time import time
 import typing as ty
 
 import pyroute2
 import routeros_api
 import routeros_api.resource
 
-from .models import Rule, Route, RosRoute, Interface
+from .models import Addresses, Rule, Route, RosRoute, Interface
 from .util import with_netmask
 
 log = logging.getLogger(__name__)
 
 
-class RouteManager(pyroute2.IPRoute):
+class Manager(ABC):
+    current: ty.Collection
+
+    @classmethod
+    @abstractmethod
+    def fromconf(cls, cfg: dict) -> "Manager": ...
+
+    @abstractmethod
+    def list_current(self) -> list:
+        """ List existing routes. """
+
+    @abstractmethod
+    def update(self): ...
+
+    def sync(self, routes: Addresses) -> dict:
+        """ Performs synchronization. """
+        self.update()
+        t = time()
+        to_skip = routes.what_exists(self.current)
+        log.info("Found %s routes to skip in %.2f seconds.", len(to_skip), time() - t)
+        t = time()
+        added, skipped = self.do_sync(routes, to_skip)
+        log.info("Performed synchronization in %.2f seconds.", time() - t)
+        return dict(added=added, skipped=skipped)
+
+    @abstractmethod
+    def do_sync(self, routes, to_skip): ...
+
+    # method for /purge endpoint
+    @abstractmethod
+    def remove_outdated(self, keep: ty.Collection[str]) -> int: ...
+
+
+class RouteManager(pyroute2.IPRoute, Manager):
     """Manager of Linux routes"""
+    current: ty.Collection[Route]
 
     def __init__(self, interface: str, table: int, priority: int):
         super().__init__()
         self._interface = interface
         self.table = table
         self.priority = priority
-        self.interface: ty.Optional[Interface] = None
-        self.current: ty.Optional[ty.List[Route]] = None
+        self.interface: Interface = self.find_interface()
+        self.current = []
 
     @classmethod
     def fromconf(cls, cfg: dict):
@@ -35,48 +71,32 @@ class RouteManager(pyroute2.IPRoute):
             raise ValueError("Please specify interface in the configuration file.")
         return cls(interface=interface, table=table, priority=priority)
 
+    def list_current(self):
+        return list(map(Route.fromdict, self.get_routes(table=self.table)))
+
     def update(self):
-        self.interface = self.find_interface(self._interface)
-        self.current = list(self.show_routes())
+        self.interface = self.find_interface()
+        self.current = self.list_current()
 
-    def show_rules(self) -> ty.Iterable[Rule]:
-        return map(Rule.fromdict, self.get_rules())
-
-    def check_rule(self, priority: int = None):
-        priority = priority or self.priority
-        if not priority:
-            log.error("Failed to add rule - no priority provided")
-        try:
-            add_rule(priority=priority, table_id=self.table, iproute=self)
-        except (MultipleRulesExists, DifferentRuleExists) as e:
-            log.warning(e)
-        except RuleExistsError as e:
-            log.info(e)
-
-    def show_routes(self, **kwargs) -> ty.Collection[Route]:
-        """ Returns dictionary of addresses without prefix in VPN (or other) table. """
-        out = self.get_routes(table=self.table, **kwargs)
-        return tuple(map(Route.fromdict, out))
-
-    def add(self, addr: str):
-        addr = with_netmask(addr)
-        self.route("add", dst=addr, oif=self.interface.num, table=self.table)
+    def do_sync(self, routes, to_skip):
+        self.check_rule()
+        return self.add_all(routes, to_skip=to_skip)
 
     def add_all(
-        self, addrs: ty.Iterable[str], to_skip: ty.Collection[Route]
+            self, addrs: ty.Iterable[str], to_skip: ty.Collection[Route]
     ) -> ty.Tuple[int, int]:
         """ Adds all routes that are not in the skip list, returns counters of how many added and skipped. """
         added, skipped = 0, 0
-        for addr in filter(lambda x: x not in to_skip, addrs):
+        for addr in addrs:
             if addr in to_skip:
                 skipped += 1
                 continue
-            self.add(addr)
+            self.route("add", dst=with_netmask(addr), oif=self.interface.num, table=self.table)
             added += 1
         return added, skipped
 
     def remove_outdated(self, keep: ty.Collection[str]) -> int:
-        current = self.show_routes()
+        current = self.list_current()
         removed = 0
         for route in current:
             route = route.with_netmask()
@@ -87,7 +107,38 @@ class RouteManager(pyroute2.IPRoute):
             removed += 1
         return removed
 
-    def find_interface(self, name):
+    ### rules ###
+    def show_rules(self) -> ty.Iterable[Rule]:
+        return map(Rule.fromdict, self.get_rules(table=self.table))
+
+    def check_rule(self, priority: int = None):
+        priority = priority or self.priority
+        if not priority:
+            log.error("Failed to add rule - no priority provided")
+        try:
+            self.add_rule()
+        except (MultipleRulesExists, DifferentRuleExists) as e:
+            log.warning(e)
+        except RuleExistsError as e:
+            log.info(e)
+
+    def add_rule(self):
+        """ Adds new rule for all addresses with lookup to a specified table. """
+        targets = [rule for rule in self.show_rules() if rule.table == self.table]
+        if not targets:
+            # create new rule if there is no any
+            self.rule("add", table=self.table, priority=self.priority)
+        elif len(targets) == 1:
+            if targets[0].priority == self.priority:
+                raise RuleExistsError(targets[0])
+            else:
+                raise DifferentRuleExists(targets[0])
+        else:
+            raise MultipleRulesExists(targets)
+
+    ### interface ###
+    def find_interface(self, name=None):
+        name = name or self._interface
         interfaces = [x for x in map(Interface, self.get_links()) if x.name == name]
         if not interfaces:
             raise ValueError(f"Failed to find interface with name {name!r}.")
@@ -96,12 +147,13 @@ class RouteManager(pyroute2.IPRoute):
         return interfaces[0]
 
 
-class RouterosManager(routeros_api.RouterOsApiPool):
+class RouterosManager(routeros_api.RouterOsApiPool, Manager):
     def __init__(self, addr, username, password, name, **kwargs):
         super().__init__(addr, username, password, **kwargs)
         self.list_name = name
         self.api: ty.Optional[routeros_api.api.RouterOsApi] = None
-        self._list: ty.Optional[routeros_api.resource.RouterOsResource] = None
+        self._cmd: ty.Optional[routeros_api.resource.RouterOsResource] = None
+        self.current: ty.List[RosRoute] = []
 
     @classmethod
     def fromconf(cls, cfg: dict):
@@ -114,37 +166,50 @@ class RouterosManager(routeros_api.RouterOsApiPool):
             name=cfg["list_name"],
         )
 
+    @property
+    def cmd(self) -> routeros_api.resource.RouterOsResource:
+        if not self._cmd:
+            self.update()
+        return self._cmd
+
+    def list_current(self) -> ty.List[RosRoute]:
+        resp = self.get_raw_routes()
+        return list(map(RosRoute.fromdict, resp))
+
     def update(self):
         self.api = self.get_api()
-        self._list = self.api.get_resource("/ip/firewall/address-list")
+        self._cmd = self.api.get_resource("/ip/firewall/address-list")
+        self.current = self.list_current()
+
+    def do_sync(self, routes, to_skip):
+        return self.add_all(routes, to_skip)
 
     # moved in method for mocking
     def get_raw_routes(self):
-        return self._list.get(**{"list": self.list_name})
+        return self.cmd.get(**{"list": self.list_name})
 
-    def get_routes(self) -> ty.Collection[RosRoute]:
-        resp = self.get_raw_routes()
-        return tuple(map(RosRoute.fromdict, resp))
-
-    def _add_route(self, params: dict):
-        return self._list.add(**params)
+    def _add_network(self, params: dict):
+        return self.cmd.add(**params)
 
     def _rm_route(self, id_):
-        return self._list.remove(id=id_)
+        return self.cmd.remove(id=id_)
 
-    def add_routes(self, addresses: ty.Iterable, to_skip: ty.Collection):
+    def add_all(self, addresses: ty.Iterable[str], to_skip: ty.Collection[RosRoute]):
+        added, skipped = 0, 0
         for addr in addresses:
             if addr in to_skip:
+                skipped += 1
                 continue
+            added += 1
             params = {"address": with_netmask(addr), "list": self.list_name}
-            log.debug("Create route arguments: %s", params)
-            resp = self._add_route(params)
+            log.debug("Add network arguments: %s", params)
+            resp = self._add_network(params)
             log.debug("ROS response: %s", resp)
+        return added, skipped
 
     def remove_outdated(self, keep: ty.Collection[str]) -> int:
-        current = self.get_routes()
         removed = 0
-        for route in current:
+        for route in self.current:
             rstr = route.with_netmask()
             if rstr in keep:
                 continue
@@ -157,22 +222,6 @@ class RouterosManager(routeros_api.RouterOsApiPool):
 
     def __exit__(self, exc_type, value, tb):
         self.disconnect()
-
-
-def add_rule(table_id, priority, iproute):
-    """ Adds new rule for all addresses with lookup to a specified table. """
-    targets = [rule for rule in iproute.show_rules() if rule.table == table_id]
-    if not targets:
-        # create new rule if there is no any
-        iproute.rule("add", table=table_id, priority=priority)
-    elif len(targets) == 1:
-        if targets[0].priority == priority:
-            raise RuleExistsError(targets[0])
-        else:
-            raise DifferentRuleExists(targets[0])
-    else:
-        raise MultipleRulesExists(targets)
-
 
 # # # # # # # # # #
 # Rule exceptions #

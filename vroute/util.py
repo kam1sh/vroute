@@ -1,5 +1,6 @@
 import itertools
 import re
+import typing as ty
 
 
 def chunked(iterable, size):
@@ -7,15 +8,17 @@ def chunked(iterable, size):
     return itertools.zip_longest(*args, fillvalue=None)
 
 
+T = ty.TypeVar("T")
+
 class WindowIterator:
     """
     Iterator with extras attributes, such as
     `first`, `last`, `pos` and `has_any`.
     """
 
-    def __init__(self, iterable):
+    def __init__(self, iterable: ty.Iterable[T]):
         self._gen = enumerate(iterable)
-        self._buf = []
+        self._buf: ty.List[T] = []
         self._ended = False
         self.pos = None
         self.fetch()

@@ -21,7 +21,7 @@ class Network:
         raise NotImplementedError
 
 
-class Addresses(set, ty.Set[Network]):
+class Addresses(set):
     """ Smart collection for IPv4/v6 addresses/networks. """
 
     def __init__(self, ignorelist=None):
@@ -44,31 +44,28 @@ class Addresses(set, ty.Set[Network]):
             addresses.add(addr)
         return addresses
 
-    def _get_current(self, table: list, clazz: ty.Type[Network] = None):
-        route_class = clazz or Route
-        return tuple(map(route_class.fromdict, table))
-
-    def what_to_skip(self, current_table: ty.Collection["Route"]) -> set:
+    def what_exists(self, current_table: ty.Iterable["Route"]) -> ty.Collection[str]:
+        """ Returns collection of addresses that already exists in current table """
         to_skip = set()
         for route in current_table:
             address = route.with_netmask()
             if address in self:
                 to_skip.add(address)
-        to_skip.update(self.ignore)
+        for item in self.ignore:
+            to_skip.add(with_netmask(item))
         return to_skip
 
     def __contains__(self, item):
         return super().__contains__(with_netmask(item))
 
 
-class Host(Base):
+class Host(Base):  # type: ignore
     # TODO ipv6 support
     __tablename__ = "hosts"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, index=True)
     expires = Column(DateTime, index=True)
     comment = Column(String)
-    # addresses = orm.relationship(Address, backref="host", passive_deletes=True)
 
     resolver = aiodns.DNSResolver(loop=asyncio.get_event_loop())
 
@@ -88,13 +85,7 @@ class Host(Base):
         self.expires = datetime.now() + timedelta(seconds=out.ttl)
         return out
 
-    def resolve(self, v6=False):
-        loop = asyncio.get_event_loop()
-        coro = self.aresolve(v6=v6)
-        result = loop.run_until_complete(coro)
-        return result
-
-    def get_addresses(self, session):
+    def get_addresses(self, session) -> ty.Collection["Address"]:
         return session.query(Address).filter(Address.host_id == self.id)
 
     async def resolve_addresses(self, session, v6=False):
@@ -113,7 +104,7 @@ class Host(Base):
         return f"<Host({self.name!r})>"
 
 
-class Address(Base, Network):
+class Address(Base, Network):  # type: ignore
     __tablename__ = "addresses"
     id = Column(Integer, primary_key=True)
     value = Column(String, index=True)
@@ -162,6 +153,7 @@ class Rule:
 
 
 class Route(Network):
+    """ Linux (netlink) route. """
     __slots__ = ("dst", "via", "table", "netmask")
 
     def __init__(self, dst: str, via: int, table: int, netmask: ty.Optional[int] = 32):
@@ -183,6 +175,7 @@ class Route(Network):
 
 
 class RosRoute(Network):
+    """ RouterOS route. """
     __slots__ = ("dst", "id")
 
     def __init__(self, dst, id_=None):

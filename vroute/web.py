@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import typing as ty
 
 from aiohttp import web
 from sqlalchemy.orm.exc import NoResultFound
@@ -52,7 +53,7 @@ async def add_routes(request):
     json = await request.json()
     routes = json["routes"]
     session = getsession(request)
-    exists = set()
+    exists: ty.Set[Address] = set()
     for chunk in chunked(routes, 100):
         addrs = (
             session.query(Address.value)
@@ -63,6 +64,7 @@ async def add_routes(request):
 
     response = {"exists": len(exists), "count": len(routes) - len(exists)}
     for item in filter(lambda x: x not in exists, routes):
+        # noinspection PyArgumentList
         addr = Address(value=item)
         session.add(addr)
     session.commit()
@@ -116,24 +118,19 @@ async def _sync(request):
     addresses = await Addresses.fromdb(
         session, ignorelist=request.app["cfg"].get("exclude")
     )
-    json = {}
+    json: ty.Dict[str, ty.Any] = {}
     ipr = request.app["netlink"]
-    # update routing information
-    ipr.update()
-    # Check routing rule and add if it doesn't exist
-    ipr.check_rule()
-    # Find what routes are up to date
-    to_skip = addresses.what_to_skip(ipr.current)
-    # Add new routes to the server routing table
-    json["added"], json["skipped"] = ipr.add_all(addresses, to_skip)
+    result = ipr.sync(addresses)
+    json.update(result)
     ros = request.app["ros"]
     if ros:
-        ros.update()
-        current = ros.get_routes()
-        to_skip = addresses.what_to_skip(current)
-        ros.add_routes(addresses, to_skip=to_skip)
+        stats = ros.sync(addresses)
+        # ros.update()
+        # current = ros.get_routes()
+        # to_skip = addresses.what_exists(current)
+        # ros.add_routes(addresses, to_skip=to_skip)
         # addresses.add_routeros_routes(conn.api, ros_cfg=ros, to_skip=to_skip)
-        json["full"] = True
+        json["routeros"] = stats
     return web.json_response(json)
 
 
