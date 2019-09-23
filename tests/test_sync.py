@@ -17,9 +17,7 @@ async def test_sync_initial(helpers):
     mgr.route.assert_called_once_with("add", dst="1.2.3.4/32", oif=7, table=10)
     mgr = RouterosManager
     mgr.get_raw_routes.assert_called_once_with()
-    mgr._add_route.assert_called_once_with(
-        {"address": "1.2.3.4/32", "list": "vpn"}
-    )
+    mgr._add_route.assert_called_once_with({"address": "1.2.3.4/32", "list": "vpn"})
 
 
 async def test_sync_append(helpers):
@@ -56,7 +54,9 @@ async def test_sync_address(helpers, session):
     session.add(Address(value="46.101.128.0/17"))
     session.commit()
     await helpers.post("/sync")
-    RouteManager.route.assert_called_once_with("add", dst="46.101.128.0/17", oif=7, table=10)
+    RouteManager.route.assert_called_once_with(
+        "add", dst="46.101.128.0/17", oif=7, table=10
+    )
     RouterosManager._add_route.assert_called_once_with(
         {"address": "46.101.128.0/17", "list": "vpn"}
     )

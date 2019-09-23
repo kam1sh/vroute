@@ -56,7 +56,9 @@ def add_routes(app, file):
     click.echo(f"Added {json['count']} routes in database.")
     click.echo(f"{json['exists']} routes skipped.")
 
+
 cli.add_command(add)
+
 
 @cli.command()
 @pass_app

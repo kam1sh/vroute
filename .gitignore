@@ -16,6 +16,10 @@ pip-log.txt
 .coverage
 .tox
 .pytest_cache
+htmlcov
+
+.swo
+.swp
 
 .DS_Store
 .idea/*
@@ -38,3 +42,4 @@ MANIFEST.in
 .venv
 /releases/*
 pip-wheel-metadata
+

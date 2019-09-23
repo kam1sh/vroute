@@ -1,4 +1,10 @@
+import itertools
 import re
+
+
+def chunked(iterable, size):
+    args = [iter(iterable)] * size
+    return itertools.zip_longest(*args, fillvalue=None)
 
 
 class WindowIterator:

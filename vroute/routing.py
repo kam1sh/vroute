@@ -136,10 +136,7 @@ class RouterosManager(routeros_api.RouterOsApiPool):
         for addr in addresses:
             if addr in to_skip:
                 continue
-            params = {
-                "address": with_netmask(addr),
-                "list": self.list_name,
-            }
+            params = {"address": with_netmask(addr), "list": self.list_name}
             log.debug("Create route arguments: %s", params)
             resp = self._add_route(params)
             log.debug("ROS response: %s", resp)

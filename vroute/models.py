@@ -4,7 +4,7 @@ import typing as ty
 import logging
 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import orm, Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 import aiodns
 
 from .util import with_netmask
@@ -21,7 +21,7 @@ class Network:
         raise NotImplementedError
 
 
-class Addresses(set):
+class Addresses(set, ty.Set[Network]):
     """ Smart collection for IPv4/v6 addresses/networks. """
 
     def __init__(self, ignorelist=None):
@@ -82,12 +82,7 @@ class Host(Base):
             record.v6 = addr.type == "AAAA"
             record.value = addr.host
             record.host_id = self.id
-            log.debug(
-                "%s address: <info>%s</>, ttl=<info>%ss</>",
-                self.name,
-                addr.host,
-                addr.ttl,
-            )
+            log.debug("%s address: %s, ttl=%ss", self.name, addr.host, addr.ttl)
             out.ttl = min(out.ttl, addr.ttl)
             out.add(record)
         self.expires = datetime.now() + timedelta(seconds=out.ttl)
@@ -187,21 +182,16 @@ class Route(Network):
         return f"{self.dst}/{self.netmask}"
 
 
-class RosRoute(Route):
-    __slots__ = ("dst", "via", "table", "id")
+class RosRoute(Network):
+    __slots__ = ("dst", "id")
 
-    def __init__(self, dst, via, table, id_=None):
-        super().__init__(dst, via, table, netmask=None)
+    def __init__(self, dst, id_=None):
+        self.dst = dst
         self.id = id_
 
     @classmethod
     def fromdict(cls, raw: dict):
-        return cls(
-            dst=raw["address"],
-            via=None,
-            table=None,
-            id_=raw["id"],
-        )
+        return cls(dst=raw["address"], id_=raw["id"])
 
     def with_netmask(self):
         return with_netmask(self.dst)

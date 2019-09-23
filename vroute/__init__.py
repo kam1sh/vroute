@@ -69,7 +69,6 @@ class VRoute:
             raise ValueError("Web application is not initialized.")
         from aiohttp import web
 
-        # run with the lock file
         with self:
             web.run_app(webapp, host="127.0.0.1", port=1015)
 

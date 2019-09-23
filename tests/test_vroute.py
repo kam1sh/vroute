@@ -98,6 +98,7 @@ async def test_add_route(helpers, query):
     assert json == {"count": 1, "exists": 0}
     assert query(Address).one() == Address(value="46.101.128.0/17")
 
+
 @pytest.mark.skip("not implemented")
 async def test_add_comments(helpers, query):
     helpers.mock_resolve("1.2.3.4")
