@@ -6,6 +6,7 @@ from json import dumps as jsondump
 import click.testing
 from vroute.routing import RouteManager, RouterosManager
 from vroute.models import Host, Address
+from vroute import console
 
 from . import samples
 
@@ -88,7 +89,8 @@ class Helpers:
     def post(self, url, **json):
         return self.requests.post(url, data=jsondump(json))
 
-    def invoke(self, *args):
+    @staticmethod
+    def console(*args):
         runner = click.testing.CliRunner()
         return runner.invoke(console.cli, args)
 
@@ -103,6 +105,7 @@ def mock_interface(patch, name="tun0", number=7):
     iface["attrs"] = [("IFLA_IFNAME", name)]
     iface["index"] = number
     RouteManager.get_links.return_value = (iface,)
+
 
 def mock_netlink(patch):
     patch.object(RouteManager, "get_routes")

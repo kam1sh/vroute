@@ -126,9 +126,10 @@ def serve(app, verbose, nocoro):
     log.setLevel(level)
     logging.basicConfig(level=level)
     app.load_db()
-    webapp = get_webapp(app, coroutines=not nocoro)
-    app.serve(webapp=webapp)
+    with app:
+        webapp = get_webapp(app, coroutines=not nocoro)
+        app.serve(webapp=webapp)
 
 
 def main():
-    cli()
+    cli()  # pylint:disable=E1120
