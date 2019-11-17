@@ -57,8 +57,8 @@ async def add_routes(request):
     for chunk in chunked(routes, 100):
         addrs = (
             session.query(Address.value)
-                .filter(Address.value.in_(chunk))
-                .filter(Address.host_id.is_(None))
+            .filter(Address.value.in_(chunk))
+            .filter(Address.host_id.is_(None))
         )
         exists.update(addrs)
 
@@ -107,22 +107,20 @@ async def remove(request):
 
 @routes.post("/sync")
 async def sync(request):
-    async with request.app["lock"]:
-        return await _sync(request)
-
-
-async def _sync(request):
-    """ Synchronizes routing tables with database. """
     session = getsession(request)
+    app = request.app
+    exclude = app["cfg"].get("exclude")
+    async with app["lock"]:
+        return await _sync(session, exclude, app["netlink"], app["ros"])
+
+
+async def _sync(session, exclude, ipr, ros):
+    """ Synchronizes routing tables with database. """
     # Fetch all hosts and their IP addresses
-    addresses = await Addresses.fromdb(
-        session, ignorelist=request.app["cfg"].get("exclude")
-    )
+    addresses = await Addresses.fromdb(session, ignorelist=exclude)
     json: ty.Dict[str, ty.Any] = {}
-    ipr = request.app["netlink"]
     result = ipr.sync(addresses)
     json.update(result)
-    ros = request.app["ros"]
     if ros:
         stats = ros.sync(addresses)
         # ros.update()
@@ -152,25 +150,30 @@ async def _purge(request):
     return web.json_response({"removed": count, "removed_ros": ros_count})
 
 
-async def startup_tasks(self, app):
-    app["sync"] = app.loop.create_task(self.background_sync())
+async def startup_tasks(app):
+    app["sync"] = app.loop.create_task(background_sync(app))
 
 
-async def shutdown_tasks(self, app):
+async def shutdown_tasks(app):
     app["sync"].cancel()
     await app["sync"]
 
 
-async def background_sync(self):
+async def background_sync(app):
     while 1:
         try:
             log.info("Executing background sync...")
-            # await self.sync(None)
+            await _sync(
+                app["vroute"].new_session(),
+                app["cfg"].get("exclude"),
+                app["netlink"],
+                app["ros"],
+            )
         except asyncio.CancelledError:
             return
-        except:
+        except:  # pylint:disable=bare-except
             log.exception("Background sync error:")
-        await asyncio.sleep(30)
+        await asyncio.sleep(600)
 
 
 def get_webapp(app, coroutines=False):

@@ -36,7 +36,11 @@ class Addresses(set):
         """ Returns all addresses from database. """
         addresses = cls(ignorelist=ignorelist)
         for host in session.query(Host):
-            host_addrs = await host.resolve_addresses(session)
+            try:
+                host_addrs = await host.resolve_addresses(session)
+            except aiodns.error.DNSError:
+                log.error("Error resolving %s", host)
+                continue
             for addr in host_addrs:
                 addresses.add(with_netmask(addr))
         session.commit()
