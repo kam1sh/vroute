@@ -6,7 +6,7 @@ from vroute import __version__, models
 from vroute.routing import RouteManager, RouterosManager
 from vroute.db import Host, Address
 from vroute.cfg import Configuration
-from vroute.util import WindowIterator, with_netmask
+from vroute.util import WindowIterator, with_netmask, chunked
 
 # # # # # # #
 # utilities #
@@ -30,6 +30,14 @@ def test_window():
     gen = WindowIterator([1])
     for _ in gen:
         assert gen.last
+
+
+def test_chunked():
+    data = range(6)
+    assert list(chunked(data, 2)) == [
+        (0, 1), (2, 3), (4, 5)
+    ]
+
 
 
 def test_version():
@@ -81,8 +89,8 @@ async def test_add_host(helpers, query):
     helpers.mock_rule(exists=True)
     helpers.mock_resolve("1.2.3.4")
     await helpers.post("/", host="example.com")
-    assert not RouteManager.get_rules.called
-    assert not RouteManager.rule.called
+    assert not RouteManager.get_rules.called # pylint:disable=no-member
+    assert not RouteManager.rule.called # pylint:disable=no-member
     assert len(list(query(Host))) == 1
     record = query(Host).filter(Host.name == "example.com").first()
     assert record

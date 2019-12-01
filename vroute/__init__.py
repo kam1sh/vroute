@@ -4,7 +4,6 @@ from pathlib import Path
 
 import requests
 
-from .routing import RouterosManager, RouteManager
 
 __version__ = "0.5.2"
 
@@ -20,20 +19,15 @@ class VRoute:
         self.ros = None
 
     def connect(self):
+        from .routing import RouteManager, RouterosManager
+
         self.netlink = RouteManager.fromconf(self.cfg)
         ros = self.cfg.get("routeros")
-        if ros:
-            self.ros = RouterosManager.fromconf(ros)
+        self.ros = RouterosManager.fromconf(ros)
 
     def disconnect(self):
         self.netlink.close()
-        if self.ros:
-            self.ros.disconnect()
-
-    def new_session(self):
-        if self.db is None:
-            raise EnvironmentError("Database is not configured yet.")
-        return self.db.new_session()
+        self.ros.disconnect()
 
     def read_config(self, file=None):
         from . import cfg
@@ -55,26 +49,3 @@ class VRoute:
             log.debug("Request info:\nparams: %s\ndata: %s", params, data)
             raise ValueError(f"Error executing request {method} {url}")
         return response
-
-    def load_db(self, file=None, debug=False):
-        if not self.db:
-            from . import db
-
-            file = file or self.cfg.db_file
-            debug = debug or self.cfg.db_debug
-            self.db = db.Database(file=file, debug=debug, auto_create=True)
-
-    def serve(self, webapp):
-        if webapp is None:
-            raise ValueError("Web application is not initialized.")
-        from aiohttp import web
-
-        with self:
-            web.run_app(webapp, host="127.0.0.1", port=1015)
-
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, exc_type, value, tb):
-        self.disconnect()

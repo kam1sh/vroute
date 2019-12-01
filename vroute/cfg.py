@@ -79,3 +79,9 @@ class Configuration:
                 return None
             val = val.get(key)
         return val
+
+    def __getitem__(self, key):
+        val = self.get(key)
+        if val is None:
+            raise KeyError(f"Configuration for {key!r} not found")
+        return val

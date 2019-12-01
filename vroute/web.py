@@ -2,10 +2,6 @@ import asyncio
 import logging
 import typing as ty
 
-from aiohttp import web
-from sqlalchemy.orm.exc import NoResultFound
-
-from .db import Host, Address
 from .util import chunked, WindowIterator
 from .models import Addresses
 
@@ -121,14 +117,8 @@ async def _sync(session, exclude, ipr, ros):
     json: ty.Dict[str, ty.Any] = {}
     result = ipr.sync(addresses)
     json.update(result)
-    if ros:
-        stats = ros.sync(addresses)
-        # ros.update()
-        # current = ros.get_routes()
-        # to_skip = addresses.what_exists(current)
-        # ros.add_routes(addresses, to_skip=to_skip)
-        # addresses.add_routeros_routes(conn.api, ros_cfg=ros, to_skip=to_skip)
-        json["routeros"] = stats
+    stats = ros.sync(addresses)
+    json["routeros"] = stats
     return web.json_response(json)
 
 

@@ -1,11 +1,12 @@
 """Click stuff"""
+import asyncio
 import logging
 import time
 
 import click
 
 from . import VRoute, __version__
-from .web import get_webapp
+from .services import NetworkingService
 from .util import WindowIterator
 
 
@@ -25,72 +26,54 @@ def get_vroute():
 def cli(ctx):
     ctx.obj = get_vroute()
 
-
-@cli.group()
-def add():
-    pass
-
-
-@add.command("host")
-@click.argument("name")
-@pass_app
-def add_host(app, name):
-    json = app.request("post", "/", json={"host": name}).json()
-    if not json["addrs"]:
-        click.echo("No addresses resolved.")
-    else:
-        if json["exists"]:
-            click.echo("Host already exists, renewing addresses.")
-        click.echo("Using addresses:")
-        for addr in json["addrs"]:
-            click.echo("  - " + addr)
-
-
-@add.command("routes")
+@cli.command("load-networks")
 @click.argument("file", type=click.File("r"))
 @pass_app
-def add_routes(app, file):
-    json = app.request(
-        "post", "/routes", json={"routes": [x.rstrip() for x in file]}
-    ).json()
-    click.echo(f"Added {json['count']} routes in database.")
-    click.echo(f"{json['exists']} routes skipped.")
-
-
-cli.add_command(add)
-
-
-@cli.command()
-@pass_app
-def show(app):
-    response = app.request("get", "/")
-    if response.status_code == 204:
-        click.echo("No hosts added yet.")
+def load_networks(app, file):
+    try:
+        psql_config = app.cfg["postgresql"]
+    except KeyError as exc:
+        click.echo(f"Failed to configure: \n{exc}")
         return
-    json = response.json()
-    for host, data in json.items():
-        comment = data.get("comment")
-        comment = (" - " + comment) if comment else ""
-        click.echo(host + comment)
-        addrs = WindowIterator(data["addrs"])
-        if addrs.has_any:
-            for addr in addrs:
-                symbol = "├──" if not addrs.last else "└──"
-                click.echo(f" {symbol} {addr}")
-        else:
-            click.echo(" └── No addresses resolved yet.")
+    service = NetworkingService(psql_config)
+
+    count, exists = asyncio.run(
+        service.load_networks(file)
+    )
+    click.echo(f"Added {count} routes in database.")
+    click.echo(f"{exists} routes skipped.")
+
+# @cli.command()
+# @pass_app
+# def show(app):
+#     response = app.request("get", "/")
+#     if response.status_code == 204:
+#         click.echo("No hosts added yet.")
+#         return
+#     json = response.json()
+#     for host, data in json.items():
+#         comment = data.get("comment")
+#         comment = (" - " + comment) if comment else ""
+#         click.echo(host + comment)
+#         addrs = WindowIterator(data["addrs"])
+#         if addrs.has_any:
+#             for addr in addrs:
+#                 symbol = "├──" if not addrs.last else "└──"
+#                 click.echo(f" {symbol} {addr}")
+#         else:
+#             click.echo(" └── No addresses resolved yet.")
 
 
-@cli.command()
-@click.argument("host")
-@pass_app
-def remove(app, host):
-    response = app.request("post", "/rm", json={"host": host}, check_resp=False)
-    if response.status_code == 404:
-        click.echo(response.json()["error"])
-        return 1
-    if response.status_code == 204:
-        click.echo(f"Host {host} removed from database.")
+# @cli.command()
+# @click.argument("host")
+# @pass_app
+# def remove(app, host):
+#     response = app.request("post", "/rm", json={"host": host}, check_resp=False)
+#     if response.status_code == 404:
+#         click.echo(response.json()["error"])
+#         return 1
+#     if response.status_code == 204:
+#         click.echo(f"Host {host} removed from database.")
 
 
 @cli.command()
@@ -105,15 +88,15 @@ def sync(app):
         click.echo("RouterOS synced successfully.")
 
 
-@cli.command()
-@click.confirmation_option(prompt="Do you want to remove outdated routes?")
-@pass_app
-def purge(app):
-    response = app.request("post", "/purge")
-    json = response.json()
-    print(json)
-    click.echo(f"Removed {json['removed']} routes.")
-    click.echo(f"Removed {json['removed_ros']} routes in RouterOS.")
+# @cli.command()
+# @click.confirmation_option(prompt="Do you want to remove outdated routes?")
+# @pass_app
+# def purge(app):
+#     response = app.request("post", "/purge")
+#     json = response.json()
+#     print(json)
+#     click.echo(f"Removed {json['removed']} routes.")
+#     click.echo(f"Removed {json['removed_ros']} routes in RouterOS.")
 
 
 @cli.command()
