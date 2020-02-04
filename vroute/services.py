@@ -46,7 +46,6 @@ class NetworkingService:
 
     async def _load_networks(self, file: ty.Iterable[str]) -> ty.Tuple[int, int]:
         count, exists = 0, 0
-        now = datetime.now()
         for network in file:
             network = network.rstrip()
             net_exists = await self.conn.fetchval(EXISTS, network)
