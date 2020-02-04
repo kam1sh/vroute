@@ -2,44 +2,107 @@ import asyncio
 import logging
 import typing as ty
 
-from .util import chunked, WindowIterator
-from .models import Addresses
+from sanic import Sanic as SanicBase
+from sanic.response import json
+
+# from .util import chunked, WindowIterator
+# from .models import Addresses
 
 log = logging.getLogger(__name__)
 
 
-def getsession(request):
-    return request.app["vroute"].new_session()
+class Sanic(SanicBase):
+    pass
+
+app = Sanic()
+
+@app.post("/sync")
+async def sync(request):
+    app = request.app
+    exclude = app["cfg"].get("exclude")
+    async with app["lock"]:
+        return await _sync(session, exclude, app["netlink"], app["ros"])
 
 
-routes = web.RouteTableDef()
+async def _sync(session, exclude, ipr, ros):
+    """ Synchronizes routing tables with database. """
+    # Fetch all hosts and their IP addresses
+    addresses = await Addresses.fromdb(session, ignorelist=exclude)
+    json: ty.Dict[str, ty.Any] = {}
+    result = ipr.sync(addresses)
+    json.update(result)
+    stats = ros.sync(addresses)
+    json["routeros"] = stats
+    return web.json_response(json)
 
 
-@routes.post("/")
-async def add_host(request):
-    """
-    Adds new Host record and resolved addresses.
-    If host already exists, renews addresses.
-    """
-    if not request.has_body:
-        return web.json_response({"error": "Provide body"}, status=400)
-    json = await request.json()
-    host = json["host"]
-    session = getsession(request)
-    already_exists = True
-    try:
-        record = session.query(Host).filter(Host.name == host).one()
-    except NoResultFound:
-        already_exists = False
-        record = Host(name=host, comment=json.get("comment"))
-        session.add(record)
-        session.commit()
-    addrs = await record.aresolve()
-    session.add_all(addrs)
-    session.commit()
-    return web.json_response(
-        {"exists": already_exists, "addrs": [x.value for x in addrs]}
-    )
+
+async def startup_tasks(app):
+    app["sync"] = app.loop.create_task(background_sync(app))
+
+
+async def shutdown_tasks(app):
+    app["sync"].cancel()
+    await app["sync"]
+
+
+async def background_sync(app):
+    while 1:
+        try:
+            log.info("Executing background sync...")
+            await _sync(
+                app["vroute"].new_session(),
+                app["cfg"].get("exclude"),
+                app["netlink"],
+                app["ros"],
+            )
+        except asyncio.CancelledError:
+            return
+        except:  # pylint:disable=bare-except
+            log.exception("Background sync error:")
+        await asyncio.sleep(600)
+
+
+def get_webapp(app, coroutines=False):
+    webapp = web.Application()
+    webapp["vroute"] = app
+    webapp["cfg"] = app.cfg
+    webapp["netlink"] = app.netlink
+    webapp["ros"] = app.ros
+    webapp["lock"] = asyncio.Lock()
+    if coroutines:
+        webapp.on_startup.append(startup_tasks)
+        webapp.on_cleanup.append(shutdown_tasks)
+    webapp.add_routes(routes)
+    return webapp
+
+
+
+# @app.post("/")
+# async def add_host(request):
+#     """
+#     Adds new Host record and resolved addresses.
+#     If host already exists, renews addresses.
+#     """
+#     if not request.has_body:
+#         return web.json_response({"error": "Provide body"}, status=400)
+#     json = await request.json()
+#     host = json["host"]
+#     session = getsession(request)
+#     already_exists = True
+#     try:
+#         record = session.query(Host).filter(Host.name == host).one()
+#     except NoResultFound:
+#         already_exists = False
+#         record = Host(name=host, comment=json.get("comment"))
+#         session.add(record)
+#         session.commit()
+#     addrs = await record.aresolve()
+#     session.add_all(addrs)
+#     session.commit()
+#     return web.json_response(
+#         {"exists": already_exists, "addrs": [x.value for x in addrs]}
+#     )
 
 
 @routes.post("/routes")
@@ -101,27 +164,6 @@ async def remove(request):
     return web.Response(status=204)
 
 
-@routes.post("/sync")
-async def sync(request):
-    session = getsession(request)
-    app = request.app
-    exclude = app["cfg"].get("exclude")
-    async with app["lock"]:
-        return await _sync(session, exclude, app["netlink"], app["ros"])
-
-
-async def _sync(session, exclude, ipr, ros):
-    """ Synchronizes routing tables with database. """
-    # Fetch all hosts and their IP addresses
-    addresses = await Addresses.fromdb(session, ignorelist=exclude)
-    json: ty.Dict[str, ty.Any] = {}
-    result = ipr.sync(addresses)
-    json.update(result)
-    stats = ros.sync(addresses)
-    json["routeros"] = stats
-    return web.json_response(json)
-
-
 @routes.post("/purge")
 async def purge(request):
     async with request.app["lock"]:
@@ -140,41 +182,3 @@ async def _purge(request):
     return web.json_response({"removed": count, "removed_ros": ros_count})
 
 
-async def startup_tasks(app):
-    app["sync"] = app.loop.create_task(background_sync(app))
-
-
-async def shutdown_tasks(app):
-    app["sync"].cancel()
-    await app["sync"]
-
-
-async def background_sync(app):
-    while 1:
-        try:
-            log.info("Executing background sync...")
-            await _sync(
-                app["vroute"].new_session(),
-                app["cfg"].get("exclude"),
-                app["netlink"],
-                app["ros"],
-            )
-        except asyncio.CancelledError:
-            return
-        except:  # pylint:disable=bare-except
-            log.exception("Background sync error:")
-        await asyncio.sleep(600)
-
-
-def get_webapp(app, coroutines=False):
-    webapp = web.Application()
-    webapp["vroute"] = app
-    webapp["cfg"] = app.cfg
-    webapp["netlink"] = app.netlink
-    webapp["ros"] = app.ros
-    webapp["lock"] = asyncio.Lock()
-    if coroutines:
-        webapp.on_startup.append(startup_tasks)
-        webapp.on_cleanup.append(shutdown_tasks)
-    webapp.add_routes(routes)
-    return webapp

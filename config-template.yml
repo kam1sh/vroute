@@ -1,3 +1,4 @@
+---
 vpn:
   table_id: 10
   rule:
@@ -5,10 +6,19 @@ vpn:
   route_to:
     interface: tun0
 
+postgresql:
+  host: 192.168.100.29
+  database: vroute
+  user: vroute
+  password:
 
 routeros:
-  addr: <router address>
-  vpn_addr: <address to forward routes>
-  table: vpn
-  username:
-  password:
+  addr: 192.168.100.21
+  username: vroute
+  password: 
+  list_name: blocked
+
+exclude:
+  - 196.240.54.0/24
+  - 185.176.221.0/24
+

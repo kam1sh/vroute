@@ -7,41 +7,51 @@ import click
 
 from . import VRoute, __version__
 from .services import NetworkingService
-from .util import WindowIterator
+
+# from .util import WindowIterator
 
 
 levels = [logging.WARNING, logging.INFO, logging.DEBUG]
 pass_app = click.make_pass_decorator(VRoute)
 
 # moved info function so we can mock app in tests
-def get_vroute():
+def get_vroute(cfg_file=None) -> VRoute:
     app = VRoute()
-    app.read_config()
+    app.read_config(file=cfg_file)
     return app
 
 
 @click.group()
+@click.option("--config", help="Configuration file")
+@click.option("-v", "--verbose", count=True)
 @click.version_option(__version__, prog_name="vroute")
 @click.pass_context
-def cli(ctx):
-    ctx.obj = get_vroute()
+def cli(ctx, config, verbose):
+    level = levels[min(verbose, 2)]
+    log = logging.getLogger("vroute")
+    log.setLevel(level)
+    logging.basicConfig(level=level)
+    try:
+        ctx.obj = get_vroute(cfg_file=config)
+    except KeyError as exc:
+        click.echo(f"Failed to configure: \n{exc}")
+        ctx.exit(1)
+    ctx.obj.connect()
+
 
 @cli.command("load-networks")
 @click.argument("file", type=click.File("r"))
 @pass_app
 def load_networks(app, file):
-    try:
-        psql_config = app.cfg["postgresql"]
-    except KeyError as exc:
-        click.echo(f"Failed to configure: \n{exc}")
-        return
-    service = NetworkingService(psql_config)
-
+    exclude = set(app.cfg.get("exclude"))
     count, exists = asyncio.run(
-        service.load_networks(file)
+        app.network_service.load_networks(
+            filter(lambda x: x.strip() not in exclude, file)
+        )
     )
     click.echo(f"Added {count} routes in database.")
     click.echo(f"{exists} routes skipped.")
+
 
 # @cli.command()
 # @pass_app
@@ -64,54 +74,25 @@ def load_networks(app, file):
 #             click.echo(" └── No addresses resolved yet.")
 
 
-# @cli.command()
-# @click.argument("host")
-# @pass_app
-# def remove(app, host):
-#     response = app.request("post", "/rm", json={"host": host}, check_resp=False)
-#     if response.status_code == 404:
-#         click.echo(response.json()["error"])
-#         return 1
-#     if response.status_code == 204:
-#         click.echo(f"Host {host} removed from database.")
+@cli.command()
+@pass_app
+def update(app: VRoute):
+    """
+    (expert only) pull existing networks and update database
+    """
+    for mgr in app.managers:
+        asyncio.run(app.network_service.update(mgr))
 
 
 @cli.command()
 @pass_app
-def sync(app):
-    start = time.time()
-    json = app.request("post", "/sync").json()
-    elapsed = time.time() - start
-    added, skipped = json["added"], json["skipped"]
-    click.echo(f"Added {added} routes, skipped {skipped} in {elapsed:.2f} seconds")
-    if "full" in json:
-        click.echo("RouterOS synced successfully.")
-
-
-# @cli.command()
-# @click.confirmation_option(prompt="Do you want to remove outdated routes?")
-# @pass_app
-# def purge(app):
-#     response = app.request("post", "/purge")
-#     json = response.json()
-#     print(json)
-#     click.echo(f"Removed {json['removed']} routes.")
-#     click.echo(f"Removed {json['removed_ros']} routes in RouterOS.")
-
-
-@cli.command()
-@click.option("-v", "--verbose", count=True)
-@click.option("--nocoro", is_flag=True, help="Disable coroutines")
-@pass_app
-def serve(app, verbose, nocoro):
-    level = levels[min(verbose, 2)]
-    log = logging.getLogger("vroute")
-    log.setLevel(level)
-    logging.basicConfig(level=level)
-    app.load_db()
-    with app:
-        webapp = get_webapp(app, coroutines=not nocoro)
-        app.serve(webapp=webapp)
+def sync(app: VRoute):
+    for mgr in app.managers:
+        start = time.time()
+        asyncio.run(app.network_service.export(mgr))
+        elapsed = time.time() - start
+        click.echo(f"Added {mgr.name} routes in {elapsed:.2f} seconds.")
+        mgr.disconnect()
 
 
 def main():

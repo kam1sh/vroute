@@ -1,54 +1,53 @@
-from abc import ABC, abstractmethod, abstractclassmethod
+from abc import ABC, abstractmethod
 import logging
-from time import time
 import typing as ty
 
 import pyroute2
 import routeros_api
 import routeros_api.resource
 
-from .models import Addresses, Rule, Route, RosRoute, Interface
+from .models import Rule, Route, RosRoute, Interface
 from .util import with_netmask
 
 log = logging.getLogger(__name__)
 
 
 class Manager(ABC):
-    current: ty.Collection
+    name = "manager"
 
     @classmethod
     @abstractmethod
     def fromconf(cls, cfg: dict) -> "Manager": ...
 
     @abstractmethod
-    def list_current(self) -> list:
-        """ List existing routes. """
+    def add(self, network: str):
+        """ Add new network. """
+
+    def prepare(self):
+        pass
+
+    def disconnect(self):
+        pass
 
     @abstractmethod
-    def update(self): ...
+    def current(self) -> ty.List[Route]:
+        """ List current networks. """
 
-    def sync(self, routes: Addresses) -> dict:
-        """ Performs synchronization. """
-        self.update()
-        t = time()
-        to_skip = routes.what_exists(self.current)
-        log.info("Found %s routes to skip in %.2f seconds.", len(to_skip), time() - t)
-        t = time()
-        added, skipped = self.do_sync(routes, to_skip)
-        log.info("Performed synchronization in %.2f seconds.", time() - t)
-        return dict(added=added, skipped=skipped)
-
-    @abstractmethod
-    def do_sync(self, routes, to_skip): ...
-
-    # method for /purge endpoint
-    @abstractmethod
-    def remove_outdated(self, keep: ty.Collection[str]) -> int: ...
+    # def sync(self, routes: Addresses) -> dict:
+    #     """ Performs synchronization. """
+    #     self.update()
+    #     t = time()
+    #     to_skip = routes.what_exists(self.current)
+    #     log.info("Found %s routes to skip in %.2f seconds.", len(to_skip), time() - t)
+    #     t = time()
+    #     added, skipped = self.do_sync(routes, to_skip)
+    #     log.info("Performed synchronization in %.2f seconds.", time() - t)
+    #     return dict(added=added, skipped=skipped)
 
 
-class RouteManager(pyroute2.IPRoute, Manager):
+class LinuxRouteManager(pyroute2.IPRoute, Manager):
     """Manager of Linux routes"""
-    current: ty.Collection[Route]
+    name = "linux"
 
     def __init__(self, interface: str, table: int, priority: int):
         super().__init__()
@@ -56,7 +55,7 @@ class RouteManager(pyroute2.IPRoute, Manager):
         self.table = table
         self.priority = priority
         self.interface: Interface = self.find_interface()
-        self.current = []
+        self.prepare()
 
     @classmethod
     def fromconf(cls, cfg: dict):
@@ -71,44 +70,23 @@ class RouteManager(pyroute2.IPRoute, Manager):
             raise ValueError("Please specify interface in the configuration file.")
         return cls(interface=interface, table=table, priority=priority)
 
-    def list_current(self):
-        return list(map(Route.fromdict, self.get_routes(table=self.table)))
-
-    def update(self):
-        self.interface = self.find_interface()
-        self.current = self.list_current()
-
-    def do_sync(self, routes, to_skip):
+    def prepare(self):
         self.check_rule()
-        return self.add_all(routes, to_skip=to_skip)
+        self.interface = self.find_interface()
 
-    def add_all(
-            self, addrs: ty.Iterable[str], to_skip: ty.Collection[Route]
-    ) -> ty.Tuple[int, int]:
-        """ Adds all routes that are not in the skip list, returns counters of how many added and skipped. """
-        added, skipped = 0, 0
-        for addr in addrs:
-            if addr in to_skip:
-                skipped += 1
-                continue
-            self.route("add", dst=with_netmask(addr), oif=self.interface.num, table=self.table)
-            added += 1
-        return added, skipped
+    def add(self, network: str):
+        try:
+            self.route(
+                "add", dst=network, oif=self.interface.num, table=self.table, scope="link")
+        except pyroute2.netlink.exceptions.NetlinkError as err:
+            if err.code != 17: # 17 = route exists
+                raise
 
-    def remove_outdated(self, keep: ty.Collection[str]) -> int:
-        current = self.list_current()
-        removed = 0
-        for route in current:
-            route = route.with_netmask()
-            if route in keep:
-                print(f"Skipping route {route}")
-                continue
-            self.route("del", dst=route, oif=self.interface.num, table=self.table)
-            removed += 1
-        return removed
+    def current(self):
+        return map(Route.fromdict, self.get_routes(table=self.table))
 
     ### rules ###
-    def show_rules(self) -> ty.Iterable[Rule]:
+    def show_rules(self) -> ty.Iterable:
         return map(Rule.fromdict, self.get_rules(table=self.table))
 
     def check_rule(self, priority: int = None):
@@ -148,12 +126,14 @@ class RouteManager(pyroute2.IPRoute, Manager):
 
 
 class RouterosManager(routeros_api.RouterOsApiPool, Manager):
-    def __init__(self, addr, username, password, name, **kwargs):
+    name = "routeros"
+
+    def __init__(self, addr, username, password, list_name, **kwargs):
         super().__init__(addr, username, password, **kwargs)
-        self.list_name = name
+        self.list_name = list_name
         self.api: ty.Optional[routeros_api.api.RouterOsApi] = None
-        self._cmd: ty.Optional[routeros_api.resource.RouterOsResource] = None
-        self.current: ty.List[RosRoute] = []
+        self.cmd: ty.Optional[routeros_api.resource.RouterOsResource] = None
+        self.prepare()
 
     @classmethod
     def fromconf(cls, cfg: dict):
@@ -163,23 +143,20 @@ class RouterosManager(routeros_api.RouterOsApiPool, Manager):
             cfg["addr"],
             username=cfg["username"],
             password=cfg["password"],
-            name=cfg["list_name"],
+            list_name=cfg["list_name"],
         )
 
-    @property
-    def cmd(self) -> routeros_api.resource.RouterOsResource:
-        if not self._cmd:
-            self.update()
-        return self._cmd
+    def add(self, network: str):
+        params = {"address": network, "list": self.list_name}
+        self._add_network(params)
 
-    def list_current(self) -> ty.List[RosRoute]:
+    def current(self) -> ty.List:
         resp = self.get_raw_routes()
-        return list(map(RosRoute.fromdict, resp))
+        return map(RosRoute.fromdict, resp)
 
-    def update(self):
+    def prepare(self):
         self.api = self.get_api()
-        self._cmd = self.api.get_resource("/ip/firewall/address-list")
-        self.current = self.list_current()
+        self.cmd = self.api.get_resource("/ip/firewall/address-list")
 
     def do_sync(self, routes, to_skip):
         return self.add_all(routes, to_skip)
@@ -194,7 +171,7 @@ class RouterosManager(routeros_api.RouterOsApiPool, Manager):
     def _rm_route(self, id_):
         return self.cmd.remove(id=id_)
 
-    def add_all(self, addresses: ty.Iterable[str], to_skip: ty.Collection[RosRoute]):
+    def add_all(self, addresses: ty.Iterable[str], to_skip: ty.Collection):
         added, skipped = 0, 0
         for addr in addresses:
             if addr in to_skip:
@@ -228,7 +205,7 @@ class RouterosManager(routeros_api.RouterOsApiPool, Manager):
 # # # # # # # # # #
 
 
-class RuleError(ValueError):
+class RuleError(RuntimeError):
     """ Base exception for rule errors. """
 
     def __init__(self, obj):
