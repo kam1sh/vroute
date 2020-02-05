@@ -6,9 +6,6 @@ import time
 import click
 
 from . import VRoute, __version__
-from .services import NetworkingService
-
-# from .util import WindowIterator
 
 
 levels = [logging.WARNING, logging.INFO, logging.DEBUG]
@@ -72,16 +69,6 @@ def load_networks(app, file):
 #                 click.echo(f" {symbol} {addr}")
 #         else:
 #             click.echo(" └── No addresses resolved yet.")
-
-
-@cli.command()
-@pass_app
-def update(app: VRoute):
-    """
-    (expert only) pull existing networks and update database
-    """
-    for mgr in app.managers:
-        asyncio.run(app.network_service.update(mgr))
 
 
 @cli.command()

@@ -11,9 +11,7 @@ pendulum = "^2.0"
 pyroute2 = "^0.5.6"
 routeros-api = "^0.15.0"
 click = "^7.0"
-requests = "^2.22"
 asyncpg = "^0.20.0"
-sanic = "^19.9.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.0"

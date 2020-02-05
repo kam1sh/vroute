@@ -33,17 +33,6 @@ class Manager(ABC):
     def current(self) -> ty.List[Route]:
         """ List current networks. """
 
-    # def sync(self, routes: Addresses) -> dict:
-    #     """ Performs synchronization. """
-    #     self.update()
-    #     t = time()
-    #     to_skip = routes.what_exists(self.current)
-    #     log.info("Found %s routes to skip in %.2f seconds.", len(to_skip), time() - t)
-    #     t = time()
-    #     added, skipped = self.do_sync(routes, to_skip)
-    #     log.info("Performed synchronization in %.2f seconds.", time() - t)
-    #     return dict(added=added, skipped=skipped)
-
 
 class LinuxRouteManager(pyroute2.IPRoute, Manager):
     """Manager of Linux routes"""
@@ -145,6 +134,9 @@ class RouterosManager(routeros_api.RouterOsApiPool, Manager):
             password=cfg["password"],
             list_name=cfg["list_name"],
         )
+
+    def disconnect(self):
+        routeros_api.RouterOsApiPool.disconnect(self)
 
     def add(self, network: str):
         params = {"address": network, "list": self.list_name}

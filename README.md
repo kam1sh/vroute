@@ -18,19 +18,15 @@ CREATE ROLE vroute WITH LOGIN PASSWORD '...';
 CREATE DATABASE vroute WITH OWNER vroute
 
 CREATE TABLE networks (
-    net inet PRIMARY KEY,
-    updated TIMESTAMP,
-    added_linux bool DEFAULT false,
-    added_routeros bool DEFAULT false
+    net inet PRIMARY KEY
 );
-CREATE INDEX netowks_updated ON networks USING btree (updated);
-CREATE INDEX networks_added_linux ON networks USING btree (added_linux);
-CREATE INDEX networks_added_routeros ON networks USING btree (added_routeros);
 ```
-2. Add mangle rule and address list:
+2. Add mangle rule and routing rule:
 ```
 /ip firewall mangle
 add action=mark-routing chain=prerouting disabled=yes dst-address-list=blocked new-routing-mark=vpn src-address=!<LINUX_IP>
+/ip route
+add distance=5 gateway=<LINUX_IP> routing-mark=vpn
 ```
 3. Create config in ~/.config/vroute.yml from config-template.yml
 4. Load list of subnets:

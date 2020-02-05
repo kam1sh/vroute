@@ -53,35 +53,16 @@ class NetworkingService:
                 log.debug("%s exists", network)
                 exists += 1
                 continue
-            await self.conn.execute(
-                "INSERT INTO networks (net, updated) VALUES ($1, NULL);", network
-            )
+            await self.conn.execute("INSERT INTO networks (net) VALUES ($1);", network)
             count += 1
         return count, exists
 
-    async def update(self, manager: Manager):
-        now = datetime.now()
-        async with self:
-            for network in manager.current():
-                await self.conn.execute(
-                    f"UPDATE networks SET added_{manager.name} = true, updated = $2 WHERE net = $1",
-                    network.with_netmask(),
-                    now,
-                )
-            await self.conn.execute(
-                f"UPDATE networks SET added_{manager.name} = false WHERE updated != $1",
-                now,
-            )
-
     async def export(self, manager: Manager):
         async with self:
+            current: ty.Set[str] = {x.with_netmask() for x in manager.current()}
             async with self.conn.transaction(isolation="serializable"):
-                async for record in self.conn.cursor(
-                    f"SELECT net FROM networks WHERE added_{manager.name} = false;"
-                ):
-                    network = record["net"]
+                async for record in self.conn.cursor("SELECT net FROM networks;"):
+                    network = str(record["net"])
+                    if network in current:
+                        continue
                     manager.add(str(network))
-                    await self.conn.execute(
-                        f"UPDATE networks SET added_{manager.name} = true WHERE net = $1",
-                        network,
-                    )
