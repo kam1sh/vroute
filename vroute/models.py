@@ -52,14 +52,15 @@ class Route:
 
 class RosRoute:
     """ RouterOS route. """
-    __slots__ = ("dst")
+    __slots__ = ("id", "dst")
 
-    def __init__(self, dst):
+    def __init__(self, id, dst):
+        self.id = id
         self.dst = dst
 
     @classmethod
     def fromdict(cls, raw: dict):
-        return cls(dst=raw["address"])
+        return cls(raw[".id"], dst=raw["address"])
 
     def with_netmask(self):
         return with_netmask(self.dst)

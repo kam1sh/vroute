@@ -3,8 +3,8 @@ import logging
 import typing as ty
 
 import pyroute2
-import routeros_api
-import routeros_api.resource
+import librouteros
+from librouteros.query import Key
 
 from .models import Rule, Route, RosRoute, Interface
 from .util import with_netmask
@@ -114,14 +114,13 @@ class LinuxRouteManager(pyroute2.IPRoute, Manager):
         return interfaces[0]
 
 
-class RouterosManager(routeros_api.RouterOsApiPool, Manager):
+class RouterosManager(Manager):
     name = "routeros"
 
     def __init__(self, addr, username, password, list_name, **kwargs):
-        super().__init__(addr, username, password, **kwargs)
+        self.api = librouteros.connect(addr, username, password)
         self.list_name = list_name
-        self.api: ty.Optional[routeros_api.api.RouterOsApi] = None
-        self.cmd: ty.Optional[routeros_api.resource.RouterOsResource] = None
+        self.cmd = None
         self.prepare()
 
     @classmethod
@@ -135,33 +134,30 @@ class RouterosManager(routeros_api.RouterOsApiPool, Manager):
             list_name=cfg["list_name"],
         )
 
-    def disconnect(self):
-        routeros_api.RouterOsApiPool.disconnect(self)
-
     def add(self, network: str):
         params = {"address": network, "list": self.list_name}
         self._add_network(params)
 
-    def current(self) -> ty.List:
+    def current(self) -> ty.Iterable[RosRoute]:
         resp = self.get_raw_routes()
         return map(RosRoute.fromdict, resp)
 
     def prepare(self):
-        self.api = self.get_api()
-        self.cmd = self.api.get_resource("/ip/firewall/address-list")
+        self.cmd = self.api.path("ip", "firewall", "address-list")
 
     def do_sync(self, routes, to_skip):
         return self.add_all(routes, to_skip)
 
     # moved in method for mocking
     def get_raw_routes(self):
-        return self.cmd.get(**{"list": self.list_name})
+        # returns {"id": ..., "address": "..."}
+        return self.cmd.select(Key(".id"), Key("address")).where(Key("list") == self.list_name)
 
     def _add_network(self, params: dict):
         return self.cmd.add(**params)
 
     def _rm_route(self, id_):
-        return self.cmd.remove(id=id_)
+        return self.cmd.remove(f"*{id_}")
 
     def add_all(self, addresses: ty.Iterable[str], to_skip: ty.Collection):
         added, skipped = 0, 0
@@ -178,7 +174,7 @@ class RouterosManager(routeros_api.RouterOsApiPool, Manager):
 
     def remove_outdated(self, keep: ty.Collection[str]) -> int:
         removed = 0
-        for route in self.current:
+        for route in self.current():
             rstr = route.with_netmask()
             if rstr in keep:
                 continue
