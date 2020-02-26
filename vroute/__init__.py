@@ -3,8 +3,6 @@ import os
 import typing as ty
 from pathlib import Path
 
-import requests
-
 from .routing import Manager
 from .services import NetworkingService
 
@@ -45,19 +43,6 @@ class VRoute:
         file = Path(file) if file else Path.home() / ".config/vroute.yml"
         self.cfg = cfg.Configuration(from_file=file)
         self.psql_config = self.cfg["postgresql"]
-
-    def request(self, method, url, params=None, data=None, json=None, check_resp=True):
-        response = requests.request(
-            method,
-            url=f"http://localhost:{self.cfg.listen_port}{url}",
-            params=params,
-            data=data,
-            json=json,
-        )
-        if check_resp and not response.ok:
-            log.debug("Request info:\nparams: %s\ndata: %s", params, data)
-            raise ValueError(f"Error executing request {method} {url}")
-        return response
 
     @property
     def managers(self) -> ty.Collection[Manager]:

@@ -66,3 +66,8 @@ class NetworkingService:
                     if network in current:
                         continue
                     manager.add(str(network))
+
+    async def contains(self, net: str):
+        async with self:
+            record = await self.conn.fetchval("SELECT net FROM networks WHERE net >>= $1::inet", net)
+            return record

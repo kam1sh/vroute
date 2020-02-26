@@ -82,5 +82,13 @@ def sync(app: VRoute):
         mgr.disconnect()
 
 
+@cli.command()
+@click.argument("network")
+@pass_app
+def contains(app: VRoute, network):
+    resp = asyncio.run(app.network_service.contains(network))
+    click.echo(resp)
+
+
 def main():
     cli()  # pylint:disable=E1120
